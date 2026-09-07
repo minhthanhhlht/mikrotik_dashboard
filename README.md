@@ -565,6 +565,13 @@ curl -u admin:matkhau http://192.168.88.1/rest/ip/hotspot/user
 2. **Quản lý & Tải về Bản sao lưu trên Router**:
    - Bảng danh sách các file `.backup` và `.rsc` có sẵn trên bộ nhớ Router.
    - Thống kê dung lượng, ngày tạo, nút tải về máy tính, nút xem nội dung và nút xóa bản sao lưu cũ.
+### Phiên 24 (2026-09-07) — Hỗ trợ Tải Trực tiếp File Nhị phân .backup về Máy tính
+1. **Tích hợp Tải File Nhị phân (.backup) qua FTP Stream**:
+   - Backend Proxy tích hợp `basic-ftp` kết nối cổng FTP 21 của RouterOS để trích xuất file `.backup` nguyên bản từng byte.
+   - Endpoint `GET /api/router/backups/download/:filename` stream file nhị phân với header `Content-Disposition: attachment`.
+2. **Trải nghiệm Tải về Đồng nhất trên Giao diện**:
+   - Cả 2 dạng **`.rsc`** và **`.backup`** đều hỗ trợ **Tự động tải về máy tính cá nhân ngay khi bấm Tạo**.
+   - Nút **`⬇️ Tải về`** trong danh sách file cho phép tải bất kỳ file nào (`.backup` hoặc `.rsc`) về máy tính của người dùng chỉ với 1 click.
 
 ---
 

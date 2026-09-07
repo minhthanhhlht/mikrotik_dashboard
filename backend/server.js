@@ -13,6 +13,8 @@ import cors from 'cors';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { Writable } from 'node:stream';
+import ftp from 'basic-ftp';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -877,6 +879,39 @@ app.get('/api/router/backups', async (req, res) => {
   }
 });
 
+// Helper: Tải file nhị phân (.backup) từ MikroTik qua FTP
+async function downloadBackupBinary(filename) {
+  // Nếu là mock router (port 4000)
+  if (MTIK_PORT === '4000' || REST_BASE.includes(':4000')) {
+    return Buffer.from(`MOCK_MIKROTIK_BINARY_BACKUP_DATA_${filename}_${Date.now()}`);
+  }
+
+  const client = new ftp.Client();
+  client.ftp.verbose = false;
+  try {
+    await client.access({
+      host: MTIK_HOST,
+      user: MTIK_USER,
+      password: MTIK_PASS,
+      port: 21,
+      timeout: 10000,
+    });
+
+    const chunks = [];
+    const writable = new Writable({
+      write(chunk, encoding, callback) {
+        chunks.push(chunk);
+        callback();
+      },
+    });
+
+    await client.downloadTo(writable, filename);
+    return Buffer.concat(chunks);
+  } finally {
+    client.close();
+  }
+}
+
 app.post('/api/router/backup/create', requireRole(['admin', 'operator']), async (req, res) => {
   const {
     type = 'rsc', // 'rsc' | 'backup'
@@ -956,6 +991,32 @@ app.post('/api/router/backup/create', requireRole(['admin', 'operator']), async 
     }
   } catch (err) {
     res.status(err.status || 500).json({ error: 'Lỗi thực hiện sao lưu: ' + err.message });
+  }
+});
+
+// Tải trực tiếp file sao lưu (.backup hoặc .rsc) về máy tính
+app.get('/api/router/backups/download/:filename', async (req, res) => {
+  const filename = req.params.filename;
+  try {
+    if (filename.toLowerCase().endsWith('.rsc')) {
+      const files = await mtik('GET', '/file');
+      const target = Array.isArray(files) ? files.find((f) => f.name === filename) : null;
+      if (!target || !target.contents) {
+        return res.status(404).json({ error: 'Không tìm thấy nội dung file script trên Router.' });
+      }
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return res.send(target.contents);
+    } else {
+      // File nhị phân .backup -> tải qua FTP
+      const buf = await downloadBackupBinary(filename);
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Length', buf.length);
+      return res.send(buf);
+    }
+  } catch (err) {
+    res.status(500).json({ error: 'Không thể tải file sao lưu: ' + err.message });
   }
 });
 

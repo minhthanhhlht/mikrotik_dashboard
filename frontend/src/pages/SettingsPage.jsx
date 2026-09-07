@@ -189,17 +189,26 @@ export default function SettingsPage() {
         if (res.contents) {
           downloadTextFile(res.filename, res.contents);
           toast.success(
-            `Đã xuất cấu hình Router "${res.filename}" và tự động tải về máy tính của bạn!`,
+            `Đã xuất cấu hình Router "${res.filename}" và tải về máy tính của bạn!`,
             'Xuất script thành công'
           );
         } else {
           toast.success(`Đã tạo file cấu hình script "${res.filename}" trên Router.`, 'Xuất file thành công');
         }
       } else {
-        toast.success(
-          `Đã tạo bản sao lưu nhị phân toàn diện "${res.filename}" (${formatBytes(res.size)}) trên Router!`,
-          'Sao lưu hệ thống thành công'
-        );
+        // Tải ngay file binary .backup về máy tính cá nhân
+        try {
+          await api.downloadRouterBackup(res.filename);
+          toast.success(
+            `Đã tạo bản sao lưu nhị phân "${res.filename}" (${formatBytes(res.size)}) và tải về máy tính của bạn!`,
+            'Sao lưu & Tải về thành công'
+          );
+        } catch (dlErr) {
+          toast.success(
+            `Đã tạo bản sao lưu "${res.filename}" trên bộ nhớ Router (Lỗi tải tự động: ${dlErr.message}).`,
+            'Sao lưu hoàn tất'
+          );
+        }
       }
       // Gợi ý tên mới cho lần tiếp theo
       setBackupForm((prev) => ({ ...prev, name: generateDefaultBackupName() }));
@@ -221,15 +230,17 @@ export default function SettingsPage() {
     setPreviewModalOpen(true);
   }
 
-  function handleDownloadExistingFile(file) {
-    if (file.contents) {
-      downloadTextFile(file.name, file.contents);
-      toast.success(`Đã tải file "${file.name}" về máy tính của bạn!`, 'Tải về hoàn tất');
-    } else {
-      toast.info(
-        `Bản sao lưu "${file.name}" đang lưu trên bộ nhớ Router. Bạn có thể khôi phục qua lệnh WinBox / WebFig.`,
-        'Bản sao lưu nhị phân'
-      );
+  async function handleDownloadExistingFile(file) {
+    try {
+      if (file.type === 'rsc' && file.contents) {
+        downloadTextFile(file.name, file.contents);
+        toast.success(`Đã tải file script "${file.name}" về máy tính!`, 'Tải về hoàn tất');
+      } else {
+        await api.downloadRouterBackup(file.name);
+        toast.success(`Đã tải file sao lưu "${file.name}" về máy tính của bạn!`, 'Tải về hoàn tất');
+      }
+    } catch (err) {
+      toast.error(`Lỗi tải file "${file.name}": ${err.message}`, 'Tải về thất bại');
     }
   }
 
@@ -1138,7 +1149,7 @@ export default function SettingsPage() {
                 ) : backupForm.type === 'rsc' ? (
                   '💾 Xuất & Tải về Máy tính (.rsc)'
                 ) : (
-                  '💾 Tạo Bản sao lưu trên Router (.backup)'
+                  '💾 Tạo & Tải về Máy tính (.backup)'
                 )}
               </button>
             </div>
@@ -1196,16 +1207,14 @@ export default function SettingsPage() {
                             👁️ Xem
                           </button>
                         )}
-                        {f.type === 'rsc' && f.contents && (
-                          <button
-                            type="button"
-                            onClick={() => handleDownloadExistingFile(f)}
-                            className="btn-ghost px-2 py-1 text-[11px] font-semibold text-emerald-600"
-                            title="Tải file về máy tính của bạn"
-                          >
-                            ⬇️ Tải về
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadExistingFile(f)}
+                          className="btn-ghost px-2 py-1 text-[11px] font-semibold text-emerald-600"
+                          title="Tải file về máy tính của bạn"
+                        >
+                          ⬇️ Tải về
+                        </button>
                         {isAdmin && (
                           <button
                             type="button"

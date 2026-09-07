@@ -115,4 +115,23 @@ export const api = {
     request('/router/backup/create', { method: 'POST', body: payload }),
   deleteRouterBackup: (id) =>
     request(`/router/backups/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  downloadRouterBackup: async (filename) => {
+    const token = getToken();
+    const headers = {};
+    if (token) headers['x-auth-token'] = token;
+    const res = await fetch(`/api/router/backups/download/${encodeURIComponent(filename)}`, { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Lỗi tải file' }));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
 };
