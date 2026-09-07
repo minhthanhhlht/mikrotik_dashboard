@@ -108,4 +108,11 @@ export const api = {
   active: () => request('/active'),
   disconnect: (id) =>
     request(`/active/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  // Sao lưu & Xuất cấu hình RouterOS
+  getRouterBackups: () => request('/router/backups'),
+  createRouterBackup: (payload) =>
+    request('/router/backup/create', { method: 'POST', body: payload }),
+  deleteRouterBackup: (id) =>
+    request(`/router/backups/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };

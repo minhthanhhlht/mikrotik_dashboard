@@ -551,6 +551,20 @@ curl -u admin:matkhau http://192.168.88.1/rest/ip/hotspot/user
    - Tích hợp endpoint REST `/api/system/performance` trích xuất đồng thời `/system/resource`, `/system/routerboard`, `/system/health`, `/interface`.
    - Tính toán tốc độ mạng tức thời Rx/Tx Rate bps dựa trên delta byte giữa các lần đo.
    - Tích hợp luồng Server-Sent Events (SSE) `/api/system/performance/events` đẩy dữ liệu stream liên tục cho frontend.
+### Phiên 23 (2026-09-07) — Tính năng Sao lưu & Xuất Cấu hình Router (Backup & Export)
+1. **Hỗ trợ Đầy đủ 2 Phương thức Sao lưu RouterOS**:
+   - **📄 Xuất Tập lệnh Cấu hình (.rsc - Khuyên dùng)**:
+     - Xuất toàn bộ lệnh cấu hình RouterOS dạng văn bản CLI (`/export`).
+     - Tùy chọn: `show-sensitive` (mật khẩu WiFi, Hotspot, PPPoE) và `compact` (chỉ cấu hình tùy biến).
+     - **Tự động tải về máy tính cá nhân**: Trình duyệt kích hoạt hộp thoại tải file `.rsc` để người dùng chọn thư mục lưu trên máy tính.
+     - **Xem trước trực tiếp (Live Code Preview)**: Modal xem toàn bộ script cấu hình trên nền tối màu cú pháp kèm nút sao chép mã.
+   - **📦 Bản sao lưu Nhị phân Toàn diện (.backup)**:
+     - Tạo snapshot toàn bộ hệ sinh thái RouterOS (`/system/backup/save`).
+     - Tùy chọn mật khẩu mã hóa hoặc không mã hóa (`dont-encrypt`).
+     - Lưu trữ an toàn trên bộ nhớ Router để khôi phục nhanh.
+2. **Quản lý & Tải về Bản sao lưu trên Router**:
+   - Bảng danh sách các file `.backup` và `.rsc` có sẵn trên bộ nhớ Router.
+   - Thống kê dung lượng, ngày tạo, nút tải về máy tính, nút xem nội dung và nút xóa bản sao lưu cũ.
 
 ---
 

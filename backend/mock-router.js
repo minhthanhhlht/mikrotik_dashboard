@@ -444,7 +444,106 @@ app.get('/rest/interface', (req, res) => {
   res.json(list);
 });
 
+// ----------------------------------------------------------------------------
+// File & Backup Storage Mock (/rest/file, /rest/system/backup/save, /rest/export)
+// ----------------------------------------------------------------------------
+const mockFiles = [
+  {
+    '.id': '*F1',
+    name: 'auto-backup-system.backup',
+    type: 'backup',
+    size: '32840',
+    'last-modified': '2026-09-01 10:00:00',
+  },
+  {
+    '.id': '*F2',
+    name: 'hotspot-config-export.rsc',
+    type: 'script',
+    size: '3450',
+    'last-modified': '2026-09-02 14:30:00',
+    contents: `# 2026-09-02 14:30:00 by RouterOS 7.16.1
+# software id = SEH8-HNVQ
+# model = RB760iGS
+/interface bridge
+add name=BridgeLAN vlan-filtering=yes
+/ip hotspot profile
+add hotspot-address=192.168.20.1 name=hsprof1
+/ip hotspot user profile
+add name=VIP rate-limit=20M/20M shared-users=5
+add name=default rate-limit=5M/5M shared-users=1
+/ip pool
+add name=dhcp_pool0 ranges=192.168.20.2-192.168.20.254
+/ip dhcp-server
+add address-pool=dhcp_pool0 interface=BridgeLAN name=dhcp1
+/ip address
+add address=192.168.20.1/24 interface=BridgeLAN network=192.168.20.0
+/ip hotspot user
+add name=khach1 password=123456 profile=default limit-uptime=00:30:00
+add name=vip-anh-tuan password=vip123 profile=VIP limit-uptime=7d`,
+  },
+];
+
+app.get('/rest/file', (req, res) => {
+  res.json(mockFiles);
+});
+
+app.delete('/rest/file/:id', (req, res) => {
+  const i = mockFiles.findIndex((f) => f['.id'] === req.params.id || f.name === req.params.id);
+  if (i !== -1) mockFiles.splice(i, 1);
+  res.status(204).json({});
+});
+
+app.post('/rest/system/backup/save', (req, res) => {
+  const { name = 'backup', password = '', 'dont-encrypt': dontEncrypt = 'false' } = req.body || {};
+  const filename = name.endsWith('.backup') ? name : `${name}.backup`;
+  const newFile = mk({
+    name: filename,
+    type: 'backup',
+    size: String(30000 + Math.floor(Math.random() * 5000)),
+    'last-modified': new Date().toISOString().replace('T', ' ').slice(0, 19),
+  });
+  mockFiles.unshift(newFile);
+  res.json([]);
+});
+
+app.post('/rest/export', (req, res) => {
+  const { file = 'export', 'show-sensitive': showSens = 'true', compact = 'true' } = req.body || {};
+  const filename = file.endsWith('.rsc') ? file : `${file}.rsc`;
+  const sampleScript = `# ${new Date().toISOString().replace('T', ' ').slice(0, 19)} by RouterOS 7.16.1
+# software id = SEH8-HNVQ
+# model = RB760iGS
+/interface bridge
+add name=BridgeLAN vlan-filtering=yes
+/ip hotspot profile
+add hotspot-address=192.168.20.1 name=hsprof1
+/ip hotspot user profile
+add name=VIP rate-limit=20M/20M shared-users=5
+add name=default rate-limit=5M/5M shared-users=1
+/ip pool
+add name=dhcp_pool0 ranges=192.168.20.2-192.168.20.254
+/ip dhcp-server
+add address-pool=dhcp_pool0 interface=BridgeLAN name=dhcp1
+/ip address
+add address=192.168.20.1/24 interface=BridgeLAN network=192.168.20.0
+/ip hotspot user
+add name=khach1 password=123456 profile=default limit-uptime=00:30:00
+add name=vip-anh-tuan password=vip123 profile=VIP limit-uptime=7d
+/system clock
+set time-zone-name=Asia/Bangkok`;
+
+  const newFile = mk({
+    name: filename,
+    type: 'script',
+    size: String(sampleScript.length),
+    'last-modified': new Date().toISOString().replace('T', ' ').slice(0, 19),
+    contents: sampleScript,
+  });
+  mockFiles.unshift(newFile);
+  res.json([]);
+});
+
 const PORT = process.env.MTIK_MOCK_PORT || 4000;
 app.listen(PORT, () => {
   console.log(`[mock-router] MikroTik REST giả: http://localhost:${PORT}/rest`);
 });
+

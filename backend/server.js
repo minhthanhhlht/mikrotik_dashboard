@@ -851,6 +851,124 @@ app.delete('/api/active/:id', requireRole(['admin', 'operator']), async (req, re
 });
 
 // ----------------------------------------------------------------------------
+// Sao lưu & Xuất cấu hình RouterOS (/system/backup/save, /export, /file)
+// ----------------------------------------------------------------------------
+app.get('/api/router/backups', async (req, res) => {
+  try {
+    const list = await mtik('GET', '/file');
+    const files = (Array.isArray(list) ? list : []).filter((f) => {
+      const name = String(f.name || '').toLowerCase();
+      const type = String(f.type || '').toLowerCase();
+      return name.endsWith('.backup') || name.endsWith('.rsc') || type === 'backup' || type === 'script';
+    });
+
+    const formatted = files.map((f) => ({
+      id: f['.id'] || f.name,
+      name: f.name,
+      type: f.name.endsWith('.backup') || f.type === 'backup' ? 'backup' : 'rsc',
+      size: Number(f.size || 0),
+      lastModified: f['last-modified'] || '',
+      contents: f.contents || null,
+    }));
+
+    res.json(formatted);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: 'Không thể lấy danh sách file sao lưu: ' + err.message });
+  }
+});
+
+app.post('/api/router/backup/create', requireRole(['admin', 'operator']), async (req, res) => {
+  const {
+    type = 'rsc', // 'rsc' | 'backup'
+    name = '',
+    showSensitive = true,
+    compact = true,
+    password = '',
+    dontEncrypt = true,
+  } = req.body || {};
+
+  const cleanName = (name || `backup_${Date.now()}`).trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+
+  try {
+    if (type === 'rsc') {
+      // 1. Xuất tập lệnh văn bản RouterOS Script (.rsc)
+      const fileName = cleanName.endsWith('.rsc') ? cleanName : `${cleanName}.rsc`;
+      const exportPayload = {
+        file: cleanName,
+        'show-sensitive': showSensitive ? 'true' : 'false',
+        compact: compact ? 'true' : 'false',
+      };
+
+      try {
+        await mtik('POST', '/export', exportPayload);
+      } catch (err) {
+        // Fallback cho routeros nếu POST trả lỗi
+        await mtik('PUT', '/export', exportPayload);
+      }
+
+      // Đợi RouterOS ghi file vào bộ nhớ
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      const files = await mtik('GET', '/file');
+      const target = Array.isArray(files) ? files.find((f) => f.name === fileName || f.name === cleanName) : null;
+
+      res.json({
+        ok: true,
+        type: 'rsc',
+        id: target?.['.id'] || fileName,
+        filename: target?.name || fileName,
+        size: Number(target?.size || (target?.contents?.length || 0)),
+        lastModified: target?.['last-modified'] || new Date().toISOString(),
+        contents: target?.contents || '',
+      });
+    } else {
+      // 2. Tạo bản sao lưu nhị phân toàn diện (.backup)
+      const fileName = cleanName.endsWith('.backup') ? cleanName : `${cleanName}.backup`;
+      const backupPayload = {
+        name: cleanName,
+      };
+      if (password) {
+        backupPayload.password = password;
+      } else if (dontEncrypt) {
+        backupPayload['dont-encrypt'] = 'true';
+      }
+
+      try {
+        await mtik('POST', '/system/backup/save', backupPayload);
+      } catch (err) {
+        await mtik('PUT', '/system/backup/save', backupPayload);
+      }
+
+      // Đợi RouterOS đóng gói file backup
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
+      const files = await mtik('GET', '/file');
+      const target = Array.isArray(files) ? files.find((f) => f.name === fileName || f.name === cleanName) : null;
+
+      res.json({
+        ok: true,
+        type: 'backup',
+        id: target?.['.id'] || fileName,
+        filename: target?.name || fileName,
+        size: Number(target?.size || 0),
+        lastModified: target?.['last-modified'] || new Date().toISOString(),
+      });
+    }
+  } catch (err) {
+    res.status(err.status || 500).json({ error: 'Lỗi thực hiện sao lưu: ' + err.message });
+  }
+});
+
+app.delete('/api/router/backups/:id', requireRole(['admin']), async (req, res) => {
+  try {
+    await mtik('DELETE', `/file/${encodeURIComponent(req.params.id)}`);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: 'Không thể xóa file sao lưu: ' + err.message });
+  }
+});
+
+// ----------------------------------------------------------------------------
 // Serve frontend production (frontend/dist) nếu đã build
 // ----------------------------------------------------------------------------
 const DIST = path.resolve(process.cwd(), '..', 'frontend', 'dist');

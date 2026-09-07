@@ -125,6 +125,130 @@ export default function SettingsPage() {
   const [loadingHotspotUsers, setLoadingHotspotUsers] = useState(false);
   const [selectedHotspotUser, setSelectedHotspotUser] = useState('');
 
+  // ----------------------------------------------------------------------------
+  // Quản lý Sao lưu & Xuất cấu hình RouterOS (.backup & .rsc)
+  // ----------------------------------------------------------------------------
+  const generateDefaultBackupName = () => {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `mikrotik_backup_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+  };
+
+  const [routerBackups, setRouterBackups] = useState([]);
+  const [loadingBackups, setLoadingBackups] = useState(false);
+  const [backupForm, setBackupForm] = useState({
+    type: 'rsc', // 'rsc' | 'backup'
+    name: generateDefaultBackupName(),
+    showSensitive: true,
+    compact: true,
+    password: '',
+    dontEncrypt: true,
+  });
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [previewData, setPreviewData] = useState({ filename: '', contents: '' });
+  const [copiedPreview, setCopiedPreview] = useState(false);
+  const [deletingBackupId, setDeletingBackupId] = useState(null);
+
+  // Tải trực tiếp file văn bản về máy tính của người dùng
+  function downloadTextFile(filename, text) {
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  const loadRouterBackups = useCallback(async () => {
+    setLoadingBackups(true);
+    try {
+      const data = await api.getRouterBackups();
+      setRouterBackups(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Không tải được danh sách backup:', err.message);
+    } finally {
+      setLoadingBackups(false);
+    }
+  }, []);
+
+  async function handleCreateBackup(e) {
+    if (e) e.preventDefault();
+    if (!backupForm.name.trim()) {
+      toast.warning('Vui lòng nhập tên file sao lưu!', 'Thiếu tên file');
+      return;
+    }
+
+    setBackupBusy(true);
+    try {
+      const res = await api.createRouterBackup(backupForm);
+      if (res.type === 'rsc') {
+        if (res.contents) {
+          downloadTextFile(res.filename, res.contents);
+          toast.success(
+            `Đã xuất cấu hình Router "${res.filename}" và tự động tải về máy tính của bạn!`,
+            'Xuất script thành công'
+          );
+        } else {
+          toast.success(`Đã tạo file cấu hình script "${res.filename}" trên Router.`, 'Xuất file thành công');
+        }
+      } else {
+        toast.success(
+          `Đã tạo bản sao lưu nhị phân toàn diện "${res.filename}" (${formatBytes(res.size)}) trên Router!`,
+          'Sao lưu hệ thống thành công'
+        );
+      }
+      // Gợi ý tên mới cho lần tiếp theo
+      setBackupForm((prev) => ({ ...prev, name: generateDefaultBackupName() }));
+      loadRouterBackups();
+    } catch (err) {
+      toast.error('Lỗi tạo sao lưu: ' + err.message, 'Sao lưu thất bại');
+    } finally {
+      setBackupBusy(false);
+    }
+  }
+
+  function handlePreviewFile(file) {
+    if (!file.contents) {
+      toast.info('File nhị phân (.backup) không thể xem trước dưới dạng văn bản. Vui lòng sử dụng file script (.rsc).', 'Không thể xem trước');
+      return;
+    }
+    setPreviewData({ filename: file.name, contents: file.contents });
+    setCopiedPreview(false);
+    setPreviewModalOpen(true);
+  }
+
+  function handleDownloadExistingFile(file) {
+    if (file.contents) {
+      downloadTextFile(file.name, file.contents);
+      toast.success(`Đã tải file "${file.name}" về máy tính của bạn!`, 'Tải về hoàn tất');
+    } else {
+      toast.info(
+        `Bản sao lưu "${file.name}" đang lưu trên bộ nhớ Router. Bạn có thể khôi phục qua lệnh WinBox / WebFig.`,
+        'Bản sao lưu nhị phân'
+      );
+    }
+  }
+
+  async function handleDeleteRouterBackup(file) {
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa bản sao lưu "${file.name}" khỏi Router?`)) {
+      return;
+    }
+    setDeletingBackupId(file.id);
+    try {
+      await api.deleteRouterBackup(file.id);
+      toast.success(`Đã xóa bản sao lưu "${file.name}" khỏi Router.`, 'Đã xóa');
+      loadRouterBackups();
+    } catch (err) {
+      toast.error('Lỗi xóa file sao lưu: ' + err.message, 'Xóa thất bại');
+    } finally {
+      setDeletingBackupId(null);
+    }
+  }
+
   const loadHotspotUsers = useCallback(async () => {
     setLoadingHotspotUsers(true);
     try {
@@ -182,10 +306,11 @@ export default function SettingsPage() {
     checkHealth(false);
     loadSystemSettings();
     loadHotspotUsers();
+    loadRouterBackups();
     if (isAdmin) {
       loadDashboardUsers();
     }
-  }, [isAdmin, loadDashboardUsers, loadHotspotUsers, loadSystemSettings]);
+  }, [isAdmin, loadDashboardUsers, loadHotspotUsers, loadRouterBackups, loadSystemSettings]);
 
   async function handleSaveVoucherSettings(e) {
     if (e) e.preventDefault();
@@ -868,6 +993,244 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      {/* 3. Sao lưu & Xuất cấu hình Router (RouterOS Backup & Export) */}
+      <section className="glass rounded-2xl p-6 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-white/40 pb-3">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-[0_0_16px_rgba(16,185,129,0.35)]">
+              💾
+            </span>
+            <div>
+              <h2 className="text-base font-bold text-ink">Sao lưu & Xuất Cấu hình Router (Backup & Export)</h2>
+              <p className="text-xs text-ink-faint">
+                Tạo bản sao lưu toàn diện hoặc xuất tập lệnh cấu hình script (.rsc) để lưu trữ an toàn trên máy tính của bạn
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={loadRouterBackups}
+            disabled={loadingBackups}
+            className="btn-ghost px-3.5 py-1.5 text-xs font-semibold"
+            title="Làm mới danh sách file sao lưu từ Router"
+          >
+            {loadingBackups ? <Spinner size="sm" /> : '⟳'} Làm mới danh sách
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          {/* Cột trái: Form cấu hình & Tạo bản sao lưu (5 cột) */}
+          <form onSubmit={handleCreateBackup} className="space-y-4 lg:col-span-5">
+            <div className="rounded-xl border border-primary/20 bg-white/40 p-4 space-y-3.5">
+              <span className="label-caps text-xs font-bold text-primary block">
+                ⚙️ Chọn Phương thức Sao lưu:
+              </span>
+
+              {/* Lựa chọn Type 1: RSC Script */}
+              <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
+                backupForm.type === 'rsc'
+                  ? 'border-emerald-500/60 bg-emerald-500/10 shadow-sm'
+                  : 'border-white/50 bg-white/30 hover:bg-white/50'
+              }`}>
+                <input
+                  type="radio"
+                  name="backupType"
+                  value="rsc"
+                  checked={backupForm.type === 'rsc'}
+                  onChange={() => setBackupForm({ ...backupForm, type: 'rsc' })}
+                  className="mt-1"
+                />
+                <div>
+                  <div className="text-xs font-bold text-ink flex items-center gap-1.5">
+                    <span>📄 Xuất Tập lệnh Cấu hình (.rsc)</span>
+                    <span className="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[10px] font-bold text-emerald-600">Khuyên dùng</span>
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-ink-soft">
+                    Tập lệnh CLI dạng văn bản. Tự động tải về máy tính cá nhân, có thể xem trước và khôi phục trên mọi dòng router MikroTik.
+                  </p>
+                </div>
+              </label>
+
+              {/* Lựa chọn Type 2: Binary Backup */}
+              <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
+                backupForm.type === 'backup'
+                  ? 'border-primary/60 bg-primary/10 shadow-sm'
+                  : 'border-white/50 bg-white/30 hover:bg-white/50'
+              }`}>
+                <input
+                  type="radio"
+                  name="backupType"
+                  value="backup"
+                  checked={backupForm.type === 'backup'}
+                  onChange={() => setBackupForm({ ...backupForm, type: 'backup' })}
+                  className="mt-1"
+                />
+                <div>
+                  <div className="text-xs font-bold text-ink">
+                    📦 Bản sao lưu Nhị phân Hệ thống (.backup)
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-ink-soft">
+                    Bản sao lưu nhị phân đầy đủ RouterOS (gồm cấu hình, chứng chỉ, mật khẩu). Lưu trên bộ nhớ Router để khôi phục nhanh.
+                  </p>
+                </div>
+              </label>
+
+              {/* Tên file sao lưu */}
+              <label className="block pt-1">
+                <span className="label-caps mb-1 block text-xs">📝 Tên file sao lưu</span>
+                <input
+                  id="backup-file-name"
+                  name="backupFileName"
+                  className="input-ghost w-full font-mono px-3 py-2 text-xs font-bold text-ink"
+                  value={backupForm.name}
+                  onChange={(e) => setBackupForm({ ...backupForm, name: e.target.value })}
+                  placeholder="vd: mikrotik_backup_2026"
+                />
+              </label>
+
+              {/* Tùy chọn chi tiết theo loại */}
+              {backupForm.type === 'rsc' ? (
+                <div className="space-y-2 pt-1 border-t border-ink/10 text-xs">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={backupForm.showSensitive}
+                      onChange={(e) => setBackupForm({ ...backupForm, showSensitive: e.target.checked })}
+                      className="rounded"
+                    />
+                    <span className="text-ink-soft font-medium">Bao gồm mật khẩu nhạy cảm (show-sensitive)</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={backupForm.compact}
+                      onChange={(e) => setBackupForm({ ...backupForm, compact: e.target.checked })}
+                      className="rounded"
+                    />
+                    <span className="text-ink-soft font-medium">Chỉ xuất cấu hình tùy biến (compact)</span>
+                  </label>
+                </div>
+              ) : (
+                <div className="space-y-2 pt-1 border-t border-ink/10 text-xs">
+                  <label className="block">
+                    <span className="label-caps mb-1 block text-[11px]">Mật khẩu mã hóa bảo vệ (Tùy chọn)</span>
+                    <input
+                      type="password"
+                      className="input-ghost w-full px-3 py-1.5 text-xs font-mono"
+                      value={backupForm.password}
+                      onChange={(e) => setBackupForm({ ...backupForm, password: e.target.value })}
+                      placeholder="Để trống nếu không đặt mật khẩu"
+                    />
+                  </label>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={backupBusy}
+                className="btn-primary w-full py-2.5 text-xs font-bold shadow-md"
+              >
+                {backupBusy ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Spinner size="sm" /> Đang xử lý sao lưu RouterOS…
+                  </span>
+                ) : backupForm.type === 'rsc' ? (
+                  '💾 Xuất & Tải về Máy tính (.rsc)'
+                ) : (
+                  '💾 Tạo Bản sao lưu trên Router (.backup)'
+                )}
+              </button>
+            </div>
+          </form>
+
+          {/* Cột phải: Danh sách các bản sao lưu đang lưu trên Router (7 cột) */}
+          <div className="flex flex-col justify-between rounded-xl border border-white/50 bg-white/30 p-4 lg:col-span-7">
+            <div>
+              <div className="mb-3 flex items-center justify-between">
+                <span className="label-caps text-xs font-bold text-ink">
+                  📁 Danh sách File Sao lưu trên Router ({routerBackups.length})
+                </span>
+                <span className="text-[11px] text-ink-faint">Đồng bộ từ /file</span>
+              </div>
+
+              {loadingBackups ? (
+                <div className="py-8 text-center">
+                  <Spinner label="Đang tải danh sách file sao lưu từ Router…" />
+                </div>
+              ) : routerBackups.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-ink/20 py-8 text-center text-xs text-ink-faint">
+                  Chưa có bản sao lưu nào trên Router. Bạn có thể bấm nút tạo bên cạnh để xuất cấu hình ngay.
+                </div>
+              ) : (
+                <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
+                  {routerBackups.map((f) => (
+                    <div
+                      key={f.id || f.name}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/60 bg-white/60 p-3 shadow-xs transition hover:bg-white"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm ${
+                          f.type === 'rsc' ? 'bg-emerald-500/15 text-emerald-600' : 'bg-primary/15 text-primary'
+                        }`}>
+                          {f.type === 'rsc' ? '📄' : '📦'}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="truncate font-mono text-xs font-bold text-ink" title={f.name}>
+                            {f.name}
+                          </div>
+                          <div className="text-[10px] text-ink-faint">
+                            {formatBytes(f.size)} · {f.lastModified || '—'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {f.type === 'rsc' && f.contents && (
+                          <button
+                            type="button"
+                            onClick={() => handlePreviewFile(f)}
+                            className="btn-ghost px-2 py-1 text-[11px] font-semibold text-primary"
+                            title="Xem trước nội dung script"
+                          >
+                            👁️ Xem
+                          </button>
+                        )}
+                        {f.type === 'rsc' && f.contents && (
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadExistingFile(f)}
+                            className="btn-ghost px-2 py-1 text-[11px] font-semibold text-emerald-600"
+                            title="Tải file về máy tính của bạn"
+                          >
+                            ⬇️ Tải về
+                          </button>
+                        )}
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRouterBackup(f)}
+                            disabled={deletingBackupId === f.id}
+                            className="rounded-lg px-2 py-1 text-[11px] font-semibold text-rose-500 hover:bg-rose-50 disabled:opacity-50 transition"
+                            title="Xóa file khỏi Router"
+                          >
+                            {deletingBackupId === f.id ? '…' : '🗑️'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-3 rounded-lg bg-primary-soft/40 p-2.5 text-[11px] text-ink-soft">
+              💡 <b>Lưu ý:</b> File <code>.rsc</code> có thể mở trực tiếp bằng Notepad/VSCode hoặc nạp lại vào MikroTik qua lệnh <code>/import file={'{ten_file}'}.rsc</code>.
+            </div>
+          </div>
+        </div>
+      </section>
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* 1. Trạng thái & Kết nối MikroTik Router */}
         <section className="glass rounded-2xl p-6 shadow-sm">
@@ -992,7 +1355,7 @@ export default function SettingsPage() {
         </section>
 
         {/* 4. Thông tin Phiên bản & Hệ thống */}
-        <section className="glass rounded-2xl p-6 shadow-sm">
+        <section className="glass col-span-1 lg:col-span-2 rounded-2xl p-6 shadow-sm">
           <div className="mb-4 flex items-center gap-2.5 border-b border-white/40 pb-3">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
               ℹ️
@@ -1003,7 +1366,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 text-xs">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-xs">
             <div className="rounded-xl bg-white/40 p-3">
               <div className="text-ink-faint">Giao diện (Frontend)</div>
               <div className="mt-1 font-bold text-ink">React 19 · Vite 8</div>
@@ -1116,6 +1479,57 @@ export default function SettingsPage() {
             </select>
           </label>
         </form>
+      </Modal>
+
+      {/* Modal Xem trước nội dung Tập lệnh Script (.rsc) */}
+      <Modal
+        open={previewModalOpen}
+        title={`📄 Nội dung Tập lệnh Cấu hình: ${previewData.filename}`}
+        onClose={() => setPreviewModalOpen(false)}
+        footer={
+          <div className="flex items-center justify-between w-full">
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(previewData.contents);
+                setCopiedPreview(true);
+                toast.info('Đã sao chép toàn bộ mã script vào bộ nhớ tạm!', 'Đã sao chép');
+                setTimeout(() => setCopiedPreview(false), 2500);
+              }}
+              className="btn-ghost px-3.5 py-2 text-xs font-semibold text-primary"
+            >
+              {copiedPreview ? '✓ Đã sao chép' : '📋 Sao chép mã'}
+            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPreviewModalOpen(false)}
+                className="btn-ghost px-4 py-2 text-xs font-semibold"
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  downloadTextFile(previewData.filename, previewData.contents);
+                  toast.success(`Đã tải file "${previewData.filename}" về máy tính!`, 'Tải về thành công');
+                }}
+                className="btn-primary px-4 py-2 text-xs font-semibold"
+              >
+                ⬇️ Tải về máy tính (.rsc)
+              </button>
+            </div>
+          </div>
+        }
+      >
+        <div className="space-y-2">
+          <p className="text-xs text-ink-soft">
+            Dưới đây là toàn bộ mã lệnh cấu hình RouterOS dạng văn bản có thể nhập trực tiếp vào terminal WinBox:
+          </p>
+          <pre className="max-h-96 overflow-auto rounded-xl bg-ink/90 p-3.5 font-mono text-xs leading-relaxed text-cyan-300 select-all border border-white/20">
+            {previewData.contents || '# Không có nội dung.'}
+          </pre>
+        </div>
       </Modal>
     </div>
   );
