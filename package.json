@@ -1,0 +1,19 @@
+{
+  "name": "mikrotik-hotspot-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "setup": "npm install && npm --prefix backend install && npm --prefix frontend install",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:mock": "npm --prefix backend run mock",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:all": "concurrently -n mock,backend,frontend -c magenta,blue,green \"npm run dev:mock\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "build": "npm --prefix frontend run build",
+    "start": "npm --prefix backend start",
+    "production": "npm run build && npm --prefix backend start"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0"
+  }
+}

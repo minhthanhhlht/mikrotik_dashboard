@@ -1,0 +1,292 @@
+@import "tailwindcss";
+
+/* ============================================================
+   NEON GLASS LIGHT — Design tokens (theo DESIGN.md)
+   ============================================================ */
+@theme {
+  /* Typography */
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  /* Core colors */
+  --color-vapor: #f4f6fa;        /* background (Luminous Void) */
+  --color-ink: #0f172a;          /* on-surface */
+  --color-ink-soft: #475569;     /* on-surface-variant */
+  --color-ink-faint: #94a3b8;    /* outline */
+  --color-line: #cbd5e1;         /* outline-variant */
+
+  /* Neon accents */
+  --color-primary: #0084ff;      /* Neon Blue */
+  --color-primary-deep: #004a9e;
+  --color-primary-soft: #cfe8ff;
+  --color-secondary: #d946ef;    /* Vibrant Magenta */
+  --color-secondary-soft: #fce7f3;
+  --color-tertiary: #7c3aed;     /* Deep Violet */
+  --color-tertiary-soft: #ede9fe;
+  --color-warning: #d97706;      /* Amber */
+  --color-warning-soft: #fef3c7;
+  --color-danger: #e11d48;
+  --color-danger-soft: #ffe4e6;
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+html {
+  font-family: var(--font-sans);
+}
+
+body {
+  background-color: var(--color-vapor);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* Con trỏ bàn tay (cursor pointer) cho tất cả buttons và clickable elements */
+button,
+[role="button"],
+select,
+summary,
+input[type="submit"],
+input[type="reset"],
+input[type="button"],
+input[type="checkbox"],
+input[type="radio"],
+a {
+  cursor: pointer;
+}
+
+button:disabled,
+[role="button"]:disabled,
+input:disabled,
+select:disabled,
+.disabled {
+  cursor: not-allowed;
+}
+
+/* Ambient neon orbs phía sau kính mờ */
+.orb {
+  position: fixed;
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(90px);
+  opacity: 0.5;
+}
+.orb-cyan {
+  width: 520px; height: 520px;
+  top: -140px; left: -120px;
+  background: radial-gradient(circle, rgba(0, 132, 255, 0.5), transparent 70%);
+}
+.orb-magenta {
+  width: 460px; height: 460px;
+  top: 18%; right: -140px;
+  background: radial-gradient(circle, rgba(217, 70, 239, 0.38), transparent 70%);
+}
+.orb-violet {
+  width: 520px; height: 520px;
+  bottom: -160px; left: 28%;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.32), transparent 70%);
+}
+
+/* ============================================================
+   Glass surfaces (Level 1 — cards)
+   ============================================================ */
+.glass {
+  background: rgba(255, 255, 255, 0.65);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.9),
+    inset -1px -1px 0 rgba(148, 163, 184, 0.3),
+    0 8px 32px rgba(15, 23, 42, 0.06);
+}
+
+/* Level 2: hover/focus — Neon Outer Glow */
+.glass-glow {
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+}
+.glass-glow:hover,
+.glass-glow:focus-within {
+  border-color: rgba(0, 132, 255, 0.45);
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.9),
+    inset -1px -1px 0 rgba(148, 163, 184, 0.3),
+    0 0 20px rgba(0, 132, 255, 0.28),
+    0 10px 25px rgba(15, 23, 42, 0.1);
+  transform: translateY(-2px);
+}
+
+/* ============================================================
+   Buttons
+   ============================================================ */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: linear-gradient(135deg, #0084ff, #00a2ff);
+  color: #ffffff;
+  font-weight: 600;
+  border: none;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 14px rgba(0, 132, 255, 0.35);
+  transition: box-shadow 0.25s ease, transform 0.25s ease, filter 0.25s ease;
+}
+.btn-primary:hover {
+  box-shadow: 0 0 26px rgba(0, 132, 255, 0.55), 0 8px 20px rgba(0, 132, 255, 0.3);
+  transform: translateY(-1px);
+  filter: brightness(1.03);
+}
+.btn-primary:disabled {
+  opacity: 0.5;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.55);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  color: var(--color-ink-soft);
+  font-weight: 500;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 0.75rem;
+  transition: box-shadow 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+}
+.btn-ghost:hover {
+  border-color: rgba(0, 132, 255, 0.55);
+  color: var(--color-primary-deep);
+  box-shadow: 0 0 16px rgba(0, 132, 255, 0.22);
+}
+
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: linear-gradient(135deg, #e11d48, #f43f5e);
+  color: #ffffff;
+  font-weight: 600;
+  border: none;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 14px rgba(225, 29, 72, 0.3);
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+}
+.btn-danger:hover {
+  box-shadow: 0 0 24px rgba(225, 29, 72, 0.5);
+  transform: translateY(-1px);
+}
+
+/* ============================================================
+   Input fields
+   ============================================================ */
+/* Ghost-box: ô nhạt với backdrop blur */
+.input-ghost {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.55);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--color-ink);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+}
+.input-ghost::placeholder { color: var(--color-ink-faint); }
+.input-ghost:focus {
+  outline: none;
+  border-color: rgba(0, 132, 255, 0.7);
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 3px rgba(0, 132, 255, 0.16), 0 0 18px rgba(0, 132, 255, 0.22);
+}
+
+/* Underline: gạch chân lan rộng từ giữa ra 2 bên + phát sáng cyan khi focus */
+.input-underline {
+  width: 100%;
+  background-color: rgba(255, 255, 255, 0.5);
+  background-image: linear-gradient(#0084ff, #0084ff);
+  background-repeat: no-repeat;
+  background-position: center bottom;
+  background-size: 0% 2px;
+  border: none;
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--color-ink);
+  transition: background-size 0.35s ease, background-color 0.25s ease;
+}
+.input-underline::placeholder { color: var(--color-ink-faint); }
+.input-underline:focus {
+  outline: none;
+  background-color: rgba(255, 255, 255, 0.85);
+  background-size: 100% 2px;
+}
+/* ============================================================
+   Labels & data display
+   ============================================================ */
+.label-caps {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-ink-soft);
+}
+.data-display {
+  font-size: 1.45rem;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--color-ink);
+}
+
+/* ============================================================
+   Tables
+   ============================================================ */
+.glass-table thead {
+  background: rgba(255, 255, 255, 0.4);
+}
+.glass-table tbody tr {
+  transition: background 0.2s ease;
+}
+.glass-table tbody tr:hover {
+  background: rgba(0, 132, 255, 0.06);
+}
+
+/* ============================================================
+   Neon utilities
+   ============================================================ */
+.neon-text {
+  color: var(--color-primary);
+  text-shadow: 0 0 8px rgba(0, 132, 255, 0.55);
+}
+.neon-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--color-primary);
+  box-shadow: 0 0 8px rgba(0, 132, 255, 0.8);
+}
+.neon-dot-danger {
+  background: var(--color-danger);
+  box-shadow: 0 0 8px rgba(225, 29, 72, 0.8);
+}
+
+/* Scrollbar kính mờ */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 132, 255, 0.5);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
