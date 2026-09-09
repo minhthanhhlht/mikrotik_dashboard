@@ -11,8 +11,12 @@ Trang **Dashboard quản trị user** cho **WiFi Hotspot của MikroTik** (Route
 > 1. Thêm header CORS cho frontend.
 > 2. Giữ mật khẩu router ở phía server (không lộ ra trình duyệt).
 
-> 📌 **QUY TẮC PHÁT TRIỂN / LƯU Ý CHO TẤT CẢ PHIÊN LÀM VIỆC:**
-> Mỗi khi hoàn thành hoặc sửa đổi bất kỳ tính năng, cấu hình, trang màn hình hay API nào, **BẮT BUỘC cập nhật chi tiết vào `README.md`** (cập nhật Cấu trúc thư mục, Checklist và thêm mục mới trong `Nhật ký phiên làm việc`) để các phiên làm việc tiếp theo luôn nắm bắt chính xác tiến độ và tiếp tục phát triển liền mạch.
+> 📌 **QUY TẮC PHÁT TRIỂN & PHÊ DUYỆT TÁC VỤ (AI AGENT & WORKFLOW RULES):**
+> 1. **Cập nhật tài liệu bắt buộc**: Mỗi khi hoàn thành hoặc sửa đổi bất kỳ tính năng, cấu hình, trang màn hình hay API nào, **BẮT BUỘC cập nhật chi tiết vào `README.md`** (cập nhật Cấu trúc thư mục, Checklist và thêm mục mới trong `Nhật ký phiên làm việc`) để các phiên tiếp theo luôn nắm bắt chính xác tiến độ.
+> 2. **Tự động phê duyệt tác vụ cần thiết ("Allow this time" / Auto-approval)**: Tự động cho phép và thực thi các thao tác phát triển thông thường (đọc/tìm kiếm code, chỉnh sửa nội dung, tạo file mới, build, chạy test, chạy server, kiểm tra git) mà không cần chờ đợi thủ công.
+> 3. ⚠️ **QUY TẮC AN TOÀN TUYỆT ĐỐI KHI XÓA FILE (FILE DELETION SAFETY POLICY)**:
+>    - **NGHIÊM CẤM** tự động phê duyệt hoặc tự ý xóa bất kỳ tệp tin/thư mục mã nguồn, cấu hình, tài nguyên hay dữ liệu nào của dự án nếu **chưa có sự xác nhận/phê duyệt trực tiếp từ người dùng**.
+>    - **NGOẠI LỆ DUY NHẤT**: Chỉ được phép tự động xóa các file tạm do chính AI tự viết phục vụ mục đích kiểm thử UI hoặc kiểm thử Backend (ví dụ: các file scratch test, temporary mock test trong `scripts/`).
 
 ---
 
@@ -572,6 +576,13 @@ curl -u admin:matkhau http://192.168.88.1/rest/ip/hotspot/user
 2. **Trải nghiệm Tải về Đồng nhất trên Giao diện**:
    - Cả 2 dạng **`.rsc`** và **`.backup`** đều hỗ trợ **Tự động tải về máy tính cá nhân ngay khi bấm Tạo**.
    - Nút **`⬇️ Tải về`** trong danh sách file cho phép tải bất kỳ file nào (`.backup` hoặc `.rsc`) về máy tính của người dùng chỉ với 1 click.
+
+### Phiên 25 (2026-09-09) — Thiết lập Quy tắc Phê duyệt Tác vụ & Bảo vệ An toàn Tệp tin Dự án
+1. **Quy tắc Tự động Phê duyệt ("Allow this time" / Auto-approval)**:
+   - Tự động hóa các thao tác thông thường (đọc/tìm kiếm, chỉnh sửa code, tạo mới file, build, chạy test, chạy server, kiểm tra git) nhằm tối ưu tốc độ và trải nghiệm phát triển.
+2. **Quy tắc Bảo vệ Tuyệt đối khi Xóa File (Strict File Deletion Protection)**:
+   - Nghiêm cấm mọi hành vi tự động duyệt hoặc tự ý xóa bất kỳ file mã nguồn, tài nguyên, cấu hình nào của dự án nếu chưa có phê duyệt trực tiếp của người dùng.
+   - Ngoại lệ duy nhất được phép tự dọn dẹp: các file tạm do chính AI tạo ra để kiểm thử UI hoặc Backend.
 
 ---
 
