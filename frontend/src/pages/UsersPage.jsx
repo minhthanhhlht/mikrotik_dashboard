@@ -7,7 +7,7 @@ import Modal from '../components/Modal.jsx';
 import Spinner from '../components/Spinner.jsx';
 import { formatBytes, formatDuration } from '../utils/format.js';
 
-// Form mặc định (key trùng tên property trong MikroTik REST API)
+// Form mặc định user (key trùng tên property trong MikroTik REST API)
 const EMPTY = {
   name: '',
   password: '',
@@ -16,6 +16,18 @@ const EMPTY = {
   'limit-bytes-total': '',
   comment: '',
   disabled: 'false',
+};
+
+// Form mặc định Profile (/ip/hotspot/user/profile)
+const EMPTY_PROFILE = {
+  name: '',
+  'shared-users': '1',
+  'rate-limit': '',
+  'address-list': '',
+  'idle-timeout': '',
+  'keepalive-timeout': '',
+  'mac-cookie-timeout': '',
+  'add-mac-cookie': 'true',
 };
 
 // Input cho form modal (kiểu gạch chân lan rộng từ giữa khi focus)
@@ -33,8 +45,13 @@ function Field({ label, children }) {
 }
 
 export default function UsersPage() {
-  const { canManageUsers, isViewer } = useAuth();
+  const { canManageUsers, canManageProfiles, isViewer } = useAuth();
   const toast = useToast();
+
+  // Tab điều hướng: 'users' (Người dùng) hoặc 'profiles' (Hồ sơ)
+  const [activeTab, setActiveTab] = useState('users');
+
+  // --- State Người dùng (Users) ---
   const [search, setSearch] = useState('');
   const [profileFilter, setProfileFilter] = useState('');
   const [formOpen, setFormOpen] = useState(false);
@@ -45,7 +62,12 @@ export default function UsersPage() {
   const [deleting, setDeleting] = useState(null);
 
   const { data: users = [], loading, error, reload } = useApi(api.users);
-  const { data: profiles = [] } = useApi(api.profiles);
+  const {
+    data: profiles = [],
+    loading: loadingProfiles,
+    error: errorProfiles,
+    reload: reloadProfiles,
+  } = useApi(api.profiles);
 
   const profileNames = useMemo(() => profiles.map((p) => p.name), [profiles]);
   const profileOf = (u) => u.profile || 'default';
@@ -84,6 +106,103 @@ export default function UsersPage() {
   }
 
   const set = (field, value) => setForm((f) => ({ ...f, [field]: value }));
+
+  // --- State & CRUD Quản lý Hồ sơ (Profiles) ---
+  const [profileSearch, setProfileSearch] = useState('');
+  const [profileFormOpen, setProfileFormOpen] = useState(false);
+  const [profileEditing, setProfileEditing] = useState(null);
+  const [profileForm, setProfileForm] = useState(EMPTY_PROFILE);
+  const [profileFormBusy, setProfileFormBusy] = useState(false);
+  const [profileFormError, setProfileFormError] = useState('');
+  const [profileBusyId, setProfileBusyId] = useState(null);
+  const [deletingProfile, setDeletingProfile] = useState(null);
+  const [createProfileForUserForm, setCreateProfileForUserForm] = useState(false);
+
+  const filteredProfiles = useMemo(() => {
+    const q = profileSearch.trim().toLowerCase();
+    if (!q) return profiles;
+    return profiles.filter((p) => `${p.name || ''}`.toLowerCase().includes(q));
+  }, [profiles, profileSearch]);
+
+  function openCreateProfile(forUserModal = false) {
+    setCreateProfileForUserForm(forUserModal);
+    setProfileEditing(null);
+    setProfileForm({ ...EMPTY_PROFILE });
+    setProfileFormError('');
+    setProfileFormOpen(true);
+  }
+
+  function openEditProfile(p) {
+    setCreateProfileForUserForm(false);
+    setProfileEditing(p);
+    setProfileForm({
+      name: p.name || '',
+      'shared-users': p['shared-users'] || '1',
+      'rate-limit': p['rate-limit'] || '',
+      'address-list': p['address-list'] || '',
+      'idle-timeout': p['idle-timeout'] || '',
+      'keepalive-timeout': p['keepalive-timeout'] || '',
+      'mac-cookie-timeout': p['mac-cookie-timeout'] || '',
+      'add-mac-cookie': p['add-mac-cookie'] ?? 'true',
+    });
+    setProfileFormError('');
+    setProfileFormOpen(true);
+  }
+
+  const setProfileField = (field, value) => setProfileForm((f) => ({ ...f, [field]: value }));
+
+  async function handleSubmitProfile(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!profileForm.name.trim()) {
+      setProfileFormError('Vui lòng nhập tên hồ sơ.');
+      return;
+    }
+    setProfileFormBusy(true);
+    setProfileFormError('');
+    try {
+      const body = {
+        ...profileForm,
+        name: profileForm.name.trim(),
+        'add-mac-cookie': profileForm['add-mac-cookie'] === 'true' ? 'true' : 'false',
+      };
+      Object.keys(body).forEach((k) => {
+        if (body[k] === undefined || body[k] === null || body[k] === '') delete body[k];
+      });
+      if (profileEditing) {
+        delete body.name; // không đổi tên profile qua PUT
+        await api.updateProfile(profileEditing['.id'], body);
+        toast.success(`Đã cập nhật hồ sơ "${profileEditing.name}"`, 'Cập nhật thành công');
+      } else {
+        await api.createProfile(body);
+        toast.success(`Đã tạo hồ sơ hotspot "${body.name}"`, 'Tạo thành công');
+        if (createProfileForUserForm) {
+          set('profile', body.name);
+        }
+      }
+      setProfileFormOpen(false);
+      reloadProfiles();
+    } catch (err) {
+      setProfileFormError(err.message);
+      toast.error(err.message, 'Lỗi thao tác');
+    } finally {
+      setProfileFormBusy(false);
+    }
+  }
+
+  async function handleDeleteProfileConfirm() {
+    if (!deletingProfile) return;
+    setProfileBusyId(deletingProfile['.id']);
+    try {
+      await api.deleteProfile(deletingProfile['.id']);
+      toast.success(`Đã xóa hồ sơ "${deletingProfile.name}"`, 'Xóa thành công');
+      setDeletingProfile(null);
+      reloadProfiles();
+    } catch (err) {
+      toast.error(`Lỗi xóa hồ sơ: ${err.message}`, 'Xóa thất bại');
+    } finally {
+      setProfileBusyId(null);
+    }
+  }
 
   // ----- Tính năng: Chọn nhiều user, Gia hạn / Reset / CSV / In thẻ -----
   const [selectedIds, setSelectedIds] = useState(() => new Set());
@@ -301,246 +420,488 @@ export default function UsersPage() {
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-ink">
-            Người dùng hotspot
+            {activeTab === 'users' ? 'Người dùng hotspot' : 'Hồ sơ gói cước (Profile)'}
             <span className="text-primary">.</span>
           </h1>
           <p className="mt-1 text-sm text-ink-soft">
-            Quản lý tài khoản trong /ip/hotspot/user
+            {activeTab === 'users'
+              ? 'Quản lý danh sách tài khoản trong /ip/hotspot/user'
+              : 'Quản lý gói cước, băng thông và giới hạn trong /ip/hotspot/user/profile'}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button onClick={exportCsv} className="btn-ghost px-4 py-2 text-sm">
-            <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-              <path d="M10 3a1 1 0 011 1v8.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 111.414-1.414L9 12.586V4a1 1 0 011-1z" />
-              <path d="M4 15a1 1 0 011 1v1h10v-1a1 1 0 112 0v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2a1 1 0 011-1z" />
-            </svg>
-            Xuất CSV
-          </button>
-          <button
-            onClick={() => printCards()}
-            className={
-              selectedIds.size > 0
-                ? 'btn-primary px-4 py-2 text-sm shadow-[0_0_18px_rgba(0,132,255,0.45)]'
-                : 'btn-ghost px-4 py-2 text-sm'
-            }
-            title={selectedIds.size > 0 ? `In ${selectedIds.size} thẻ đã chọn` : 'Tích chọn user trong bảng để in thẻ'}
-          >
-            <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-              <path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v2h1a2 2 0 012 2v5a2 2 0 01-2 2h-1v2a2 2 0 01-2 2H7a2 2 0 01-2-2v-2H4a2 2 0 01-2-2V8a2 2 0 012-2h1V4zm9 4H6v8h8V8z" />
-            </svg>
-            In thẻ WiFi {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
-          </button>
-          {canManageUsers && (
-            <button onClick={openCreate} className="btn-primary px-4 py-2 text-sm">
+
+        {activeTab === 'users' && (
+          <div className="flex flex-wrap items-center gap-3">
+            <button onClick={exportCsv} className="btn-ghost px-4 py-2 text-sm">
               <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-                <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
+                <path d="M10 3a1 1 0 011 1v8.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 111.414-1.414L9 12.586V4a1 1 0 011-1z" />
+                <path d="M4 15a1 1 0 011 1v1h10v-1a1 1 0 112 0v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2a1 1 0 011-1z" />
               </svg>
-              Thêm người dùng
+              Xuất CSV
             </button>
-          )}
-        </div>
-      </header>
-
-      {/* Thanh tìm kiếm / lọc & Trạng thái chọn thẻ */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative w-72">
-            <svg
-              viewBox="0 0 20 20"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint"
-            >
-              <circle cx="9" cy="9" r="5.5" />
-              <path d="m13.5 13.5 3.5 3.5" strokeLinecap="round" />
-            </svg>
-            <input
-              id="users-search"
-              name="usersSearch"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm theo tên / ghi chú…"
-              className="input-ghost pl-9"
-            />
-          </div>
-          <select
-            id="users-profile-filter"
-            name="usersProfileFilter"
-            value={profileFilter}
-            onChange={(e) => setProfileFilter(e.target.value)}
-            className={`${selectField} w-48`}
-          >
-            <option value="">Tất cả profile</option>
-            {profileNames.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-          <span className="text-xs font-medium text-ink-faint">
-            Hiển thị {filtered.length}/{users.length}
-          </span>
-        </div>
-
-        {selectedIds.size > 0 && (
-          <div className="flex items-center gap-2 rounded-xl border border-primary/40 bg-primary-soft/40 px-3.5 py-1.5 text-xs font-medium text-primary-deep shadow-[0_0_12px_rgba(0,132,255,0.15)] animate-in fade-in">
-            <span>
-              Đã chọn <b>{selectedIds.size}</b> người dùng
-            </span>
             <button
               onClick={() => printCards()}
-              className="btn-primary ml-1 px-2.5 py-1 text-xs font-semibold"
+              className={
+                selectedIds.size > 0
+                  ? 'btn-primary px-4 py-2 text-sm shadow-[0_0_18px_rgba(0,132,255,0.45)]'
+                  : 'btn-ghost px-4 py-2 text-sm'
+              }
+              title={selectedIds.size > 0 ? `In ${selectedIds.size} thẻ đã chọn` : 'Tích chọn user trong bảng để in thẻ'}
             >
-              🖨️ In {selectedIds.size} thẻ
+              <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                <path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v2h1a2 2 0 012 2v5a2 2 0 01-2 2h-1v2a2 2 0 01-2 2H7a2 2 0 01-2-2v-2H4a2 2 0 01-2-2V8a2 2 0 012-2h1V4zm9 4H6v8h8V8z" />
+              </svg>
+              In thẻ WiFi {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
             </button>
-            <button
-              onClick={clearSelection}
-              className="btn-ghost px-2 py-1 text-xs"
-            >
-              Bỏ chọn
-            </button>
+            {canManageUsers && (
+              <button onClick={openCreate} className="btn-primary px-4 py-2 text-sm">
+                <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                  <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
+                </svg>
+                Thêm người dùng
+              </button>
+            )}
           </div>
         )}
+
+        {activeTab === 'profiles' && (
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={reloadProfiles}
+              disabled={loadingProfiles}
+              className="btn-ghost px-4 py-2 text-sm"
+            >
+              {loadingProfiles ? <Spinner size="sm" /> : '⟳'} Làm mới
+            </button>
+            {canManageProfiles && (
+              <button onClick={() => openCreateProfile(false)} className="btn-primary px-4 py-2 text-sm">
+                <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                  <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
+                </svg>
+                Thêm hồ sơ mới
+              </button>
+            )}
+          </div>
+        )}
+      </header>
+
+      {/* Thanh chuyển đổi Tab: Người dùng vs Hồ sơ */}
+      <div className="flex items-center gap-2 border-b border-white/40 pb-3">
+        <button
+          type="button"
+          onClick={() => setActiveTab('users')}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs md:text-sm font-bold transition ${
+            activeTab === 'users'
+              ? 'bg-primary text-white shadow-[0_0_16px_rgba(0,132,255,0.4)]'
+              : 'bg-white/40 text-ink-soft hover:bg-white/70 hover:text-ink'
+          }`}
+        >
+          <span>👥 Người dùng Hotspot</span>
+          <span
+            className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+              activeTab === 'users' ? 'bg-white/20 text-white' : 'bg-ink/10 text-ink-soft'
+            }`}
+          >
+            {users.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('profiles')}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs md:text-sm font-bold transition ${
+            activeTab === 'profiles'
+              ? 'bg-primary text-white shadow-[0_0_16px_rgba(0,132,255,0.4)]'
+              : 'bg-white/40 text-ink-soft hover:bg-white/70 hover:text-ink'
+          }`}
+        >
+          <span>⚡ Hồ sơ Gói cước (Profiles)</span>
+          <span
+            className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+              activeTab === 'profiles' ? 'bg-white/20 text-white' : 'bg-ink/10 text-ink-soft'
+            }`}
+          >
+            {profiles.length}
+          </span>
+        </button>
       </div>
 
-      {error ? (
-        <div className="glass rounded-2xl border-danger/40 p-5 shadow-[0_0_24px_rgba(225,29,72,0.15)]">
-          <p className="font-semibold text-danger">Không lấy được danh sách người dùng.</p>
-          <p className="mt-1 text-sm text-ink-soft">{error}</p>
-          <button onClick={reload} className="btn-danger mt-3 px-4 py-2 text-xs">
-            ⟳ Thử lại
-          </button>
-        </div>
-      ) : loading ? (
-        <Spinner label="Đang tải người dùng…" />
-      ) : (
-        <div className="glass overflow-hidden rounded-2xl">
-          <div className="overflow-x-auto">
-            <table className="glass-table w-full text-left text-sm">
-              <thead>
-                <tr className="label-caps">
-                  <th className="w-10 px-4 py-3.5 text-center">
-                    <input
-                      type="checkbox"
-                      aria-label="Chọn tất cả người dùng"
-                      checked={isAllSelected}
-                      onChange={toggleSelectAll}
-                      className="h-4 w-4 rounded border-line text-primary focus:ring-primary accent-primary"
-                    />
-                  </th>
-                  <th className="px-4 py-3.5 font-semibold">Người dùng</th>
-                  <th className="px-4 py-3.5 font-semibold">Profile</th>
-                  <th className="px-4 py-3.5 font-semibold">Giới hạn thời gian</th>
-                  <th className="px-4 py-3.5 font-semibold">Giới hạn dung lượng</th>
-                  <th className="px-4 py-3.5 font-semibold">Trạng thái</th>
-                  <th className="px-4 py-3.5 text-right font-semibold">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-ink/5">
-                {filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-5 py-12 text-center text-ink-faint">
-                      Không có người dùng nào.
-                    </td>
-                  </tr>
-                )}
-                {filtered.map((u) => (
-                  <tr
-                    key={u['.id']}
-                    className={selectedIds.has(u['.id']) ? 'bg-primary-soft/30' : ''}
-                  >
-                    <td className="w-10 px-4 py-3.5 text-center">
-                      <input
-                        type="checkbox"
-                        aria-label={`Chọn ${u.name}`}
-                        checked={selectedIds.has(u['.id'])}
-                        onChange={() => toggleSelect(u['.id'])}
-                        className="h-4 w-4 rounded border-line text-primary focus:ring-primary accent-primary"
-                      />
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <div className="flex items-center gap-2.5">
-                        <span className={`neon-dot ${u.disabled === 'true' ? 'neon-dot-danger' : ''}`} />
-                        <div>
-                          <div className="font-semibold text-ink">{u.name}</div>
-                          {u.comment && (
-                            <div className="text-xs text-ink-faint">{u.comment}</div>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <span className="rounded-lg bg-tertiary-soft/70 px-2.5 py-1 text-xs font-semibold text-tertiary">
-                        {profileOf(u)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3.5 text-ink-soft">
-                      {u['limit-uptime'] ? formatDuration(u['limit-uptime']) : '—'}
-                    </td>
-                    <td className="px-4 py-3.5 text-ink-soft">
-                      {u['limit-bytes-total'] ? formatBytes(u['limit-bytes-total']) : '—'}
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <span
-                        className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
-                          u.disabled === 'true'
-                            ? 'bg-danger-soft text-danger'
-                            : 'bg-primary-soft text-primary-deep'
-                        }`}
-                      >
-                        <span className={`neon-dot ${u.disabled === 'true' ? 'neon-dot-danger' : ''}`} />
-                        {u.disabled === 'true' ? 'Tạm khóa' : 'Hoạt động'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3.5 text-right">
-                      {isViewer ? (
-                        <span className="rounded-md bg-ink/5 px-2.5 py-1 text-xs italic text-ink-faint">
-                          Chỉ xem
-                        </span>
-                      ) : (
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => printCards([u])}
-                            className="rounded-lg px-2.5 py-1 text-xs font-semibold text-primary transition hover:bg-primary-soft"
-                            title="In riêng thẻ WiFi cho người dùng này"
-                          >
-                            🖨️ In thẻ
-                          </button>
-                          <button
-                            onClick={() => setExtending(u)}
-                            className="rounded-lg px-2.5 py-1 text-xs font-semibold text-primary transition hover:bg-primary-soft hover:shadow-[0_0_12px_rgba(0,132,255,0.25)]"
-                            title="Gia hạn thời gian"
-                          >
-                            + Gia hạn
-                          </button>
-                          <button
-                            onClick={() => handleReset(u)}
-                            disabled={busyId === u['.id']}
-                            className="rounded-lg px-2.5 py-1 text-xs font-semibold text-tertiary transition hover:bg-tertiary-soft disabled:opacity-50"
-                            title="Reset bộ đếm dung lượng"
-                          >
-                            {busyId === u['.id'] ? '…' : '↺ Reset'}
-                          </button>
-                          <button onClick={() => openEdit(u)} className="btn-ghost px-3 py-1.5 text-xs">
-                            Sửa
-                          </button>
-                          <button
-                            onClick={() => setDeleting(u)}
-                            className="ml-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-danger transition hover:bg-danger-soft hover:shadow-[0_0_14px_rgba(225,29,72,0.25)]"
-                          >
-                            Xóa
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
+      {/* ================= TAB 1: NGƯỜI DÙNG HOTSPOT ================= */}
+      {activeTab === 'users' && (
+        <div className="space-y-4">
+          {/* Thanh tìm kiếm / lọc & Trạng thái chọn thẻ */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative w-72">
+                <svg
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint"
+                >
+                  <circle cx="9" cy="9" r="5.5" />
+                  <path d="m13.5 13.5 3.5 3.5" strokeLinecap="round" />
+                </svg>
+                <input
+                  id="users-search"
+                  name="usersSearch"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Tìm theo tên / ghi chú…"
+                  className="input-ghost pl-9"
+                />
+              </div>
+
+              <select
+                id="users-profile-filter"
+                name="usersProfileFilter"
+                value={profileFilter}
+                onChange={(e) => setProfileFilter(e.target.value)}
+                className={`${selectField} w-44`}
+              >
+                <option value="">Tất cả profile</option>
+                {profileNames.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
                 ))}
-              </tbody>
-            </table>
+              </select>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('profiles')}
+                className="btn-ghost px-2.5 py-1.5 text-xs font-semibold text-primary"
+                title="Chuyển sang xem & quản lý hồ sơ"
+              >
+                ⚡ Quản lý hồ sơ
+              </button>
+
+              <span className="text-xs font-medium text-ink-faint">
+                Hiển thị {filtered.length}/{users.length}
+              </span>
+            </div>
+
+            {selectedIds.size > 0 && (
+              <div className="flex items-center gap-2 rounded-xl border border-primary/40 bg-primary-soft/40 px-3.5 py-1.5 text-xs font-medium text-primary-deep shadow-[0_0_12px_rgba(0,132,255,0.15)] animate-in fade-in">
+                <span>
+                  Đã chọn <b>{selectedIds.size}</b> người dùng
+                </span>
+                <button
+                  onClick={() => printCards()}
+                  className="btn-primary ml-1 px-2.5 py-1 text-xs font-semibold"
+                >
+                  🖨️ In {selectedIds.size} thẻ
+                </button>
+                <button
+                  onClick={clearSelection}
+                  className="btn-ghost px-2 py-1 text-xs"
+                >
+                  Bỏ chọn
+                </button>
+              </div>
+            )}
           </div>
+
+          {error ? (
+            <div className="glass rounded-2xl border-danger/40 p-5 shadow-[0_0_24px_rgba(225,29,72,0.15)]">
+              <p className="font-semibold text-danger">Không lấy được danh sách người dùng.</p>
+              <p className="mt-1 text-sm text-ink-soft">{error}</p>
+              <button onClick={reload} className="btn-danger mt-3 px-4 py-2 text-xs">
+                ⟳ Thử lại
+              </button>
+            </div>
+          ) : loading ? (
+            <Spinner label="Đang tải người dùng…" />
+          ) : (
+            <div className="glass overflow-hidden rounded-2xl shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="glass-table w-full text-left text-sm">
+                  <thead>
+                    <tr className="label-caps">
+                      <th className="w-10 px-4 py-3.5 text-center">
+                        <input
+                          type="checkbox"
+                          aria-label="Chọn tất cả người dùng"
+                          checked={isAllSelected}
+                          onChange={toggleSelectAll}
+                          className="h-4 w-4 rounded border-line text-primary focus:ring-primary accent-primary"
+                        />
+                      </th>
+                      <th className="px-4 py-3.5 font-semibold">Người dùng</th>
+                      <th className="px-4 py-3.5 font-semibold">Profile</th>
+                      <th className="px-4 py-3.5 font-semibold">Giới hạn thời gian</th>
+                      <th className="px-4 py-3.5 font-semibold">Giới hạn dung lượng</th>
+                      <th className="px-4 py-3.5 font-semibold">Trạng thái</th>
+                      <th className="px-4 py-3.5 text-right font-semibold">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-ink/5">
+                    {filtered.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="px-5 py-12 text-center text-ink-faint">
+                          Không có người dùng nào.
+                        </td>
+                      </tr>
+                    )}
+                    {filtered.map((u) => (
+                      <tr
+                        key={u['.id']}
+                        className={selectedIds.has(u['.id']) ? 'bg-primary-soft/30' : ''}
+                      >
+                        <td className="w-10 px-4 py-3.5 text-center">
+                          <input
+                            type="checkbox"
+                            aria-label={`Chọn ${u.name}`}
+                            checked={selectedIds.has(u['.id'])}
+                            onChange={() => toggleSelect(u['.id'])}
+                            className="h-4 w-4 rounded border-line text-primary focus:ring-primary accent-primary"
+                          />
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center gap-2.5">
+                            <span className={`neon-dot ${u.disabled === 'true' ? 'neon-dot-danger' : ''}`} />
+                            <div>
+                              <div className="font-semibold text-ink">{u.name}</div>
+                              {u.comment && (
+                                <div className="text-xs text-ink-faint">{u.comment}</div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProfileSearch(profileOf(u));
+                              setActiveTab('profiles');
+                            }}
+                            className="rounded-lg bg-tertiary-soft/70 px-2.5 py-1 text-xs font-semibold text-tertiary hover:bg-tertiary-soft transition"
+                            title={`Xem chi tiết profile ${profileOf(u)}`}
+                          >
+                            {profileOf(u)}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3.5 text-ink-soft">
+                          {u['limit-uptime'] ? formatDuration(u['limit-uptime']) : '—'}
+                        </td>
+                        <td className="px-4 py-3.5 text-ink-soft">
+                          {u['limit-bytes-total'] ? formatBytes(u['limit-bytes-total']) : '—'}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span
+                            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
+                              u.disabled === 'true'
+                                ? 'bg-danger-soft text-danger'
+                                : 'bg-primary-soft text-primary-deep'
+                            }`}
+                          >
+                            <span className={`neon-dot ${u.disabled === 'true' ? 'neon-dot-danger' : ''}`} />
+                            {u.disabled === 'true' ? 'Tạm khóa' : 'Hoạt động'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5 text-right">
+                          {isViewer ? (
+                            <span className="rounded-md bg-ink/5 px-2.5 py-1 text-xs italic text-ink-faint">
+                              Chỉ xem
+                            </span>
+                          ) : (
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => printCards([u])}
+                                className="rounded-lg px-2.5 py-1 text-xs font-semibold text-primary transition hover:bg-primary-soft"
+                                title="In riêng thẻ WiFi cho người dùng này"
+                              >
+                                🖨️ In thẻ
+                              </button>
+                              <button
+                                onClick={() => setExtending(u)}
+                                className="rounded-lg px-2.5 py-1 text-xs font-semibold text-primary transition hover:bg-primary-soft hover:shadow-[0_0_12px_rgba(0,132,255,0.25)]"
+                                title="Gia hạn thời gian"
+                              >
+                                + Gia hạn
+                              </button>
+                              <button
+                                onClick={() => handleReset(u)}
+                                disabled={busyId === u['.id']}
+                                className="rounded-lg px-2.5 py-1 text-xs font-semibold text-tertiary transition hover:bg-tertiary-soft disabled:opacity-50"
+                                title="Reset bộ đếm dung lượng"
+                              >
+                                {busyId === u['.id'] ? '…' : '↺ Reset'}
+                              </button>
+                              <button onClick={() => openEdit(u)} className="btn-ghost px-3 py-1.5 text-xs">
+                                Sửa
+                              </button>
+                              <button
+                                onClick={() => setDeleting(u)}
+                                className="ml-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-danger transition hover:bg-danger-soft hover:shadow-[0_0_14px_rgba(225,29,72,0.25)]"
+                              >
+                                Xóa
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
+
+      {/* ================= TAB 2: HỒ SƠ GÓI CƯỚC (PROFILES) ================= */}
+      {activeTab === 'profiles' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="relative w-72">
+              <svg
+                viewBox="0 0 20 20"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint"
+              >
+                <circle cx="9" cy="9" r="5.5" />
+                <path d="m13.5 13.5 3.5 3.5" strokeLinecap="round" />
+              </svg>
+              <input
+                id="profiles-search"
+                name="profilesSearch"
+                value={profileSearch}
+                onChange={(e) => setProfileSearch(e.target.value)}
+                placeholder="Tìm theo tên hồ sơ…"
+                className="input-ghost pl-9"
+              />
+            </div>
+            <span className="text-xs font-medium text-ink-faint">
+              Hiển thị {filteredProfiles.length}/{profiles.length} hồ sơ · Đồng bộ /ip/hotspot/user/profile
+            </span>
+          </div>
+
+          {errorProfiles ? (
+            <div className="glass rounded-2xl border-danger/40 p-5 shadow-[0_0_24px_rgba(225,29,72,0.15)]">
+              <p className="font-semibold text-danger">Không lấy được danh sách hồ sơ từ MikroTik.</p>
+              <p className="mt-1 text-sm text-ink-soft">{errorProfiles}</p>
+              <button onClick={reloadProfiles} className="btn-danger mt-3 px-4 py-2 text-xs">
+                ⟳ Thử lại
+              </button>
+            </div>
+          ) : loadingProfiles ? (
+            <Spinner label="Đang tải danh sách hồ sơ từ MikroTik Router…" />
+          ) : (
+            <div className="glass overflow-hidden rounded-2xl shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="glass-table w-full text-left text-sm">
+                  <thead>
+                    <tr className="label-caps">
+                      <th className="px-5 py-3.5 font-semibold">Tên Hồ Sơ</th>
+                      <th className="px-5 py-3.5 font-semibold">User Đang Dùng</th>
+                      <th className="px-5 py-3.5 font-semibold">Tốc Độ (rate-limit)</th>
+                      <th className="px-5 py-3.5 font-semibold">Thiết Bị Dùng Chung</th>
+                      <th className="px-5 py-3.5 font-semibold">Idle Timeout</th>
+                      <th className="px-5 py-3.5 font-semibold">MAC Cookie</th>
+                      <th className="px-5 py-3.5 text-right font-semibold">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-ink/5">
+                    {filteredProfiles.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="px-5 py-12 text-center text-ink-faint">
+                          Không tìm thấy hồ sơ nào.
+                        </td>
+                      </tr>
+                    )}
+                    {filteredProfiles.map((p) => {
+                      const userCount = users.filter((u) => profileOf(u) === p.name).length;
+                      return (
+                        <tr key={p['.id'] || p.name} className="hover:bg-white/40 transition">
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center gap-2.5">
+                              <span className={`neon-dot ${p.default === 'true' ? '' : 'neon-dot-danger'}`} />
+                              <span className="font-bold text-ink">{p.name}</span>
+                              {p.default === 'true' && (
+                                <span className="rounded-full bg-tertiary-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-tertiary">
+                                  default
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setProfileFilter(p.name);
+                                setActiveTab('users');
+                              }}
+                              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                                userCount > 0
+                                  ? 'bg-primary/10 text-primary hover:bg-primary/20'
+                                  : 'bg-ink/5 text-ink-faint'
+                              }`}
+                              title={`Lọc danh sách ${userCount} người dùng thuộc hồ sơ ${p.name}`}
+                            >
+                              <span>👥</span>
+                              <b>{userCount}</b> user{userCount > 1 ? 's' : ''}
+                            </button>
+                          </td>
+                          <td className="px-5 py-3.5 text-ink-soft">
+                            {p['rate-limit'] ? (
+                              <span className="rounded-lg bg-primary-soft px-2.5 py-1 text-xs font-semibold text-primary-deep">
+                                {p['rate-limit']}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-ink-faint">Không giới hạn</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3.5 text-ink-soft">{p['shared-users'] || '1'}</td>
+                          <td className="px-5 py-3.5 text-ink-soft">{p['idle-timeout'] || '—'}</td>
+                          <td className="px-5 py-3.5 text-ink-soft">
+                            {p['add-mac-cookie'] === 'true' ? (
+                              <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-600">
+                                <span>✓</span> {p['mac-cookie-timeout'] || 'Bật'}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-ink-faint">Tắt</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3.5 text-right">
+                            {canManageProfiles ? (
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => openEditProfile(p)}
+                                  className="btn-ghost px-3 py-1.5 text-xs font-semibold"
+                                >
+                                  Sửa
+                                </button>
+                                <button
+                                  onClick={() => setDeletingProfile(p)}
+                                  disabled={profileBusyId === p['.id'] || p.default === 'true'}
+                                  className="rounded-lg px-3 py-1.5 text-xs font-semibold text-danger transition hover:bg-danger-soft disabled:cursor-not-allowed disabled:opacity-40"
+                                  title={p.default === 'true' ? 'Không xóa được hồ sơ mặc định' : undefined}
+                                >
+                                  {profileBusyId === p['.id'] ? '…' : 'Xóa'}
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="rounded-md bg-ink/5 px-2.5 py-1 text-xs italic text-ink-faint">
+                                Chỉ xem
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ================= MODAL TẠO / SỬA NGƯỜI DÙNG ================= */}
       <Modal
         open={formOpen}
         title={editing ? `Sửa "${editing.name}"` : 'Thêm người dùng mới'}
@@ -594,7 +955,23 @@ export default function UsersPage() {
                 placeholder="vd: 123456"
               />
             </Field>
-            <Field label="Hồ sơ (Profile)">
+            <Field
+              label={
+                <div className="flex items-center justify-between">
+                  <span>Hồ sơ (Profile)</span>
+                  {canManageProfiles && (
+                    <button
+                      type="button"
+                      onClick={() => openCreateProfile(true)}
+                      className="text-[11px] font-bold text-primary hover:underline"
+                      title="Tạo nhanh hồ sơ mới"
+                    >
+                      + Tạo hồ sơ mới
+                    </button>
+                  )}
+                </div>
+              }
+            >
               <select
                 id="user-profile"
                 name="profile"
@@ -662,7 +1039,187 @@ export default function UsersPage() {
         </form>
       </Modal>
 
-      {/* Modal gia hạn thời gian */}
+      {/* ================= MODAL TẠO / SỬA HỒ SƠ (PROFILE) ================= */}
+      <Modal
+        open={profileFormOpen}
+        title={profileEditing ? `Sửa hồ sơ "${profileEditing.name}"` : 'Thêm hồ sơ (Profile) mới'}
+        onClose={() => setProfileFormOpen(false)}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setProfileFormOpen(false)}
+              className="btn-ghost px-4 py-2 text-sm"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmitProfile}
+              disabled={profileFormBusy}
+              className="btn-primary px-4 py-2 text-sm disabled:opacity-50"
+            >
+              {profileFormBusy ? (
+                <>
+                  <Spinner size="sm" />
+                  <span>Đang lưu…</span>
+                </>
+              ) : profileEditing ? (
+                'Cập nhật hồ sơ'
+              ) : (
+                'Tạo hồ sơ'
+              )}
+            </button>
+          </>
+        }
+      >
+        <form onSubmit={handleSubmitProfile} className="space-y-4">
+          {profileFormError && (
+            <div className="rounded-xl bg-danger-soft px-4 py-2.5 text-sm font-medium text-danger">
+              {profileFormError}
+            </div>
+          )}
+
+          <Field label="Tên hồ sơ *">
+            <input
+              id="profile-name"
+              name="name"
+              className={inputField}
+              value={profileForm.name}
+              onChange={(e) => setProfileField('name', e.target.value)}
+              placeholder="vd: khach-vip-10m"
+              autoFocus
+              disabled={!!profileEditing}
+            />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Giới hạn tốc độ (rate-limit)">
+              <input
+                id="profile-rate"
+                name="rate-limit"
+                className={inputField}
+                value={profileForm['rate-limit']}
+                onChange={(e) => setProfileField('rate-limit', e.target.value)}
+                placeholder="vd: 10M/10M, 5M/2M"
+              />
+            </Field>
+            <Field label="Số user dùng chung">
+              <input
+                id="profile-shared"
+                name="shared-users"
+                className={inputField}
+                value={profileForm['shared-users']}
+                onChange={(e) => setProfileField('shared-users', e.target.value)}
+                placeholder="vd: 1, 5, unlimited"
+              />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Idle timeout">
+              <input
+                id="profile-idle"
+                name="idle-timeout"
+                className={inputField}
+                value={profileForm['idle-timeout']}
+                onChange={(e) => setProfileField('idle-timeout', e.target.value)}
+                placeholder="vd: 5m, none"
+              />
+            </Field>
+            <Field label="Keepalive timeout">
+              <input
+                id="profile-keepalive"
+                name="keepalive-timeout"
+                className={inputField}
+                value={profileForm['keepalive-timeout']}
+                onChange={(e) => setProfileField('keepalive-timeout', e.target.value)}
+                placeholder="vd: 5m"
+              />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="MAC cookie timeout">
+              <input
+                id="profile-maccookie"
+                name="mac-cookie-timeout"
+                className={inputField}
+                value={profileForm['mac-cookie-timeout']}
+                onChange={(e) => setProfileField('mac-cookie-timeout', e.target.value)}
+                placeholder="vd: 3d, 1d"
+              />
+            </Field>
+            <Field label="Address list">
+              <input
+                id="profile-addresslist"
+                name="address-list"
+                className={inputField}
+                value={profileForm['address-list']}
+                onChange={(e) => setProfileField('address-list', e.target.value)}
+                placeholder="vd: allowed-hotspot"
+              />
+            </Field>
+          </div>
+
+          <label className="flex cursor-pointer items-center justify-between gap-3 text-sm text-ink-soft">
+            <span>Cho phép MAC cookie (ghi nhớ đăng nhập)</span>
+            <span
+              className="relative inline-flex h-6 w-11 items-center rounded-full bg-ink/10 transition-colors data-[on=true]:bg-primary"
+              data-on={profileForm['add-mac-cookie'] === 'true'}
+            >
+              <input
+                type="checkbox"
+                className="peer sr-only"
+                checked={profileForm['add-mac-cookie'] === 'true'}
+                onChange={(e) =>
+                  setProfileField('add-mac-cookie', e.target.checked ? 'true' : 'false')
+                }
+              />
+              <span className="inline-block h-5 w-5 translate-x-0.5 transform rounded-full bg-white shadow transition peer-checked:translate-x-[22px] peer-checked:shadow-[0_0_12px_rgba(0,132,255,0.7)]" />
+            </span>
+          </label>
+        </form>
+      </Modal>
+
+      {/* ================= MODAL XÁC NHẬN XÓA HỒ SƠ ================= */}
+      <Modal
+        open={!!deletingProfile}
+        title="Xóa hồ sơ (Profile)"
+        onClose={() => setDeletingProfile(null)}
+        footer={
+          <>
+            <button
+              onClick={() => setDeletingProfile(null)}
+              className="btn-ghost px-4 py-2 text-sm"
+            >
+              Hủy
+            </button>
+            <button
+              onClick={handleDeleteProfileConfirm}
+              disabled={profileBusyId === deletingProfile?.['.id']}
+              className="btn-danger px-4 py-2 text-sm"
+            >
+              {profileBusyId === deletingProfile?.['.id'] ? 'Đang xóa…' : 'Xác nhận xóa'}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-ink-soft">
+            Bạn có chắc chắn muốn xóa hồ sơ <b className="font-semibold text-ink">{deletingProfile?.name}</b>?
+          </p>
+          {users.filter((u) => profileOf(u) === deletingProfile?.name).length > 0 && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800">
+              ⚠️ <b>Cảnh báo:</b> Đang có{' '}
+              <b>{users.filter((u) => profileOf(u) === deletingProfile?.name).length}</b> tài khoản
+              người dùng thuộc hồ sơ này. Xóa hồ sơ có thể gây lỗi xác thực cho các tài khoản đó.
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* ================= MODAL GIA HẠN THỜI GIAN ================= */}
       <Modal
         open={!!extending}
         title={`Gia hạn "${extending?.name}"`}
@@ -713,7 +1270,7 @@ export default function UsersPage() {
         </div>
       </Modal>
 
-      {/* Modal xác nhận xóa */}
+      {/* ================= MODAL XÁC NHẬN XÓA NGƯỜI DÙNG ================= */}
       <Modal
         open={!!deleting}
         title="Xóa người dùng"

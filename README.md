@@ -591,6 +591,20 @@ curl -u admin:matkhau http://192.168.88.1/rest/ip/hotspot/user
 2. **Tối ưu Giao diện Nút Sao lưu & Tải về (`SettingsPage.jsx`)**:
    - Căn giữa nội dung chuẩn xác (`justify-center`), giữ nguyên kích thước chiều cao chuẩn của nút khi ở trạng thái đang xử lý sao lưu RouterOS.
 
+### Phiên 27 (2026-09-09) — Tích hợp Trực tiếp Quản lý Hồ sơ (Profiles) vào Trang Người Dùng
+1. **Thanh Chuyển đổi Tab Tiện Lợi (`UsersPage.jsx`)**:
+   - Tab **👥 Tài khoản Người dùng** (kèm badge số lượng user): Toàn bộ bảng quản lý, xuất CSV, in thẻ voucher, gia hạn, reset counter, tìm kiếm và lọc profile.
+   - Tab **⚡ Hồ sơ Gói cước (Profiles)** (kèm badge số lượng profile): Quản lý `/ip/hotspot/user/profile`, xem chi tiết giới hạn tốc độ `rate-limit`, `shared-users`, timeout, MAC cookie.
+2. **Thống kê User Đang Dùng Mỗi Profile**:
+   - Bảng Profile tự động đếm và hiển thị số lượng người dùng đang gán từng profile (vd: `👥 3 users`).
+   - Click vào số user sẽ tự động chuyển sang tab Người dùng và áp dụng bộ lọc profile tương ứng tức thì.
+3. **Liên kết Nhanh Khi Tạo / Sửa Người Dùng**:
+   - Nút **`+ Tạo hồ sơ mới`** đặt ngay cạnh nhãn chọn Profile trong modal tạo/sửa người dùng, tự động chọn profile mới tạo sau khi lưu thành công mà không phải rời trang.
+   - Nút **`⚡ Quản lý hồ sơ`** đặt ngay cạnh thanh lọc Profile của bảng người dùng để chuyển tab nhanh chóng.
+4. **Modal CRUD Profile An Toàn**:
+   - Thêm/sửa cấu hình Profile đầy đủ các trường RouterOS.
+   - Modal xác nhận xóa cảnh báo chi tiết nếu đang có tài khoản người dùng hoạt động thuộc hồ sơ đó.
+
 ---
 
 ```bash
