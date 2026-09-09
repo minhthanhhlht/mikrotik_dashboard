@@ -17,6 +17,10 @@ Trang **Dashboard quản trị user** cho **WiFi Hotspot của MikroTik** (Route
 > 3. ⚠️ **QUY TẮC AN TOÀN TUYỆT ĐỐI KHI XÓA FILE (FILE DELETION SAFETY POLICY)**:
 >    - **NGHIÊM CẤM** tự động phê duyệt hoặc tự ý xóa bất kỳ tệp tin/thư mục mã nguồn, cấu hình, tài nguyên hay dữ liệu nào của dự án nếu **chưa có sự xác nhận/phê duyệt trực tiếp từ người dùng**.
 >    - **NGOẠI LỆ DUY NHẤT**: Chỉ được phép tự động xóa các file tạm do chính AI tự viết phục vụ mục đích kiểm thử UI hoặc kiểm thử Backend (ví dụ: các file scratch test, temporary mock test trong `scripts/`).
+> 4. 🛡️ **QUY TẮC BẢO TOÀN LOGIC & PHÒNG CHỐNG HỒI QUY (ZERO-REGRESSION & IMPACT ANALYSIS POLICY)**:
+>    - **BẮT BUỘC** suy nghĩ, rà soát và phân tích kỹ lưỡng các luồng dữ liệu (Data flow), chữ ký hàm (Function signature), kiểu dữ liệu trả về và trạng thái (State) trước khi sửa đổi bất kỳ đoạn code nào.
+>    - Tuyệt đối **KHÔNG** làm ảnh hưởng (breaking changes/side effects) đến các tính năng, luồng logic cũ đã hoạt động ổn định và thành công trước đó.
+>    - Luôn chạy kiểm thử (`npm run build`, API test scripts) và kiểm tra tương thích ngược sau mỗi lần chỉnh sửa.
 
 ---
 
@@ -618,6 +622,12 @@ curl -u admin:matkhau http://192.168.88.1/rest/ip/hotspot/user
    - **Trang Cài đặt (`SettingsPage.jsx`)**:
      - Dropdown Chọn Tài khoản Router điền mẫu in thẻ: Hiển thị icon `👤`, tên tài khoản, mật khẩu kèm badge gói cước.
      - Dropdown Phân nhóm quyền Hệ thống (`admin-user-group`): Hiển thị icon `👑`/`✍️`/`👁️`, quyền chi tiết và badge phân quyền rõ ràng.
+
+### Phiên 29 (2026-09-09) — Thiết lập Nguyên tắc Cốt lõi: Phân tích Ảnh hưởng & Bảo toàn Tuyệt đối Logic Hiện có
+1. **Thiết lập Quy tắc Phòng chống Hồi quy (Zero-Regression Policy)**:
+   - Trước khi sửa đổi bất kỳ logic frontend hoặc backend nào, bắt buộc rà soát toàn bộ các luồng phụ thuộc, tham số truyền vào/trả về, state và sự kiện liên quan để không gây ảnh hưởng (side-effects) đến các tính năng đã chạy thành công trước đó.
+2. **Kiểm tra Toàn vẹn Liên tục**:
+   - Mọi thay đổi đều được kiểm tra biên dịch (`npm run build`), kiểm tra API và kiểm tra giao diện để đảm bảo tính ổn định và liên tục 100%.
 
 ---
 
