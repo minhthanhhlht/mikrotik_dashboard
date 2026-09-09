@@ -39,6 +39,15 @@ const icons = {
       <circle cx="12" cy="18.5" r="1.6" fill="currentColor" stroke="none" />
     </svg>
   ),
+  proxmox: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+      <rect x="2" y="3" width="20" height="7" rx="2" />
+      <rect x="2" y="14" width="20" height="7" rx="2" />
+      <circle cx="6" cy="6.5" r="1" fill="currentColor" />
+      <circle cx="6" cy="17.5" r="1" fill="currentColor" />
+      <path d="M11 6.5h7M11 17.5h7" />
+    </svg>
+  ),
   router: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
       <rect x="3" y="8" width="18" height="8" rx="2" />
@@ -65,6 +74,7 @@ const icons = {
 
 const NAV = [
   { to: '/performance', label: 'Hiệu năng Router', icon: 'performance', end: true },
+  { to: '/proxmox', label: 'Proxmox VE', icon: 'proxmox', end: true },
   { to: '/', label: 'Tổng quan Hotspot', icon: 'dashboard', end: true },
   { to: '/users', label: 'Người dùng', icon: 'users', end: false },
   { to: '/profiles', label: 'Hồ sơ', icon: 'profiles', end: false },

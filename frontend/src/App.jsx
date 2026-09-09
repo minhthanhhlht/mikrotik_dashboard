@@ -7,6 +7,7 @@ import UsersPage from './pages/UsersPage.jsx';
 import SessionsPage from './pages/SessionsPage.jsx';
 import ProfilesPage from './pages/ProfilesPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
+import ProxmoxPerformancePage from './pages/ProxmoxPerformancePage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 
 function Protected({ children }) {
@@ -28,6 +29,7 @@ export default function App() {
         }
       >
         <Route path="/performance" element={<SystemPerformancePage />} />
+        <Route path="/proxmox" element={<ProxmoxPerformancePage />} />
         <Route index element={<DashboardPage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/profiles" element={<ProfilesPage />} />

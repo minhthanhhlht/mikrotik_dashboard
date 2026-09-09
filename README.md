@@ -92,8 +92,9 @@ MikroTik RouterOS 7  (không CORS)   HOẶC   mock-router (localhost:4000)
 ```
 wifi_hostpost_web/
 ├── backend/                     # Proxy API
-│   ├── server.js                # Express proxy -> MikroTik /rest
+│   ├── server.js                # Express proxy -> MikroTik /rest + Proxmox API
 │   ├── mock-router.js           # Giả lập MikroTik REST API (RAM) để dev
+│   ├── mock-proxmox.js          # Giả lập Proxmox VE 8.x Hypervisor & Live Metrics (RAM)
 │   ├── package.json
 │   ├── .env                     # Cấu hình router (KHÔNG commit)
 │   └── .env.example             # Mẫu cấu hình
@@ -101,15 +102,17 @@ wifi_hostpost_web/
 │   └── src/
 │       ├── main.jsx / App.jsx   # Entry + Router (Protected routes)
 │       ├── index.css            # Tailwind + Neon Glass Light tokens
-│       ├── api/client.js        # Gọi backend /api
+│       ├── api/client.js        # Gọi backend /api (MikroTik + Proxmox)
 │       ├── pages/
-│       │   ├── DashboardPage.jsx   # Tổng quan: thẻ số liệu + biểu đồ profile + phiên gần đây + SSE
-│       │   ├── UsersPage.jsx       # CRUD người dùng hotspot (gia hạn, reset, xuất CSV, in thẻ)
-│       │   ├── ProfilesPage.jsx    # CRUD hồ sơ hotspot (rate-limit, shared-users, mac-cookie)
-│       │   ├── SessionsPage.jsx    # Phiên active + nút Ngắt (kick)
-│       │   ├── SettingsPage.jsx    # Cài đặt kết nối Router, mẫu in thẻ, bảo mật, thông tin HT
-│       │   └── LoginPage.jsx       # Đăng nhập quản trị viên
-│       ├── components/          # Layout, ConnectionStatus, Modal, Spinner, StatCard
+│       │   ├── SystemPerformancePage.jsx  # Giám sát hiệu năng phần cứng RouterOS (CPU, RAM, HDD, Uptime, Traffic)
+│       │   ├── ProxmoxPerformancePage.jsx # Giám sát & Quản trị Proxmox VE (Node, KVM, LXC, ZFS, Bridges)
+│       │   ├── DashboardPage.jsx          # Tổng quan Hotspot: thẻ số liệu + biểu đồ profile + phiên gần đây + SSE
+│       │   ├── UsersPage.jsx              # CRUD người dùng hotspot (gia hạn, reset, xuất CSV, in thẻ, quản lý profile)
+│       │   ├── ProfilesPage.jsx           # CRUD hồ sơ hotspot (rate-limit, shared-users, mac-cookie)
+│       │   ├── SessionsPage.jsx           # Phiên active + nút Ngắt (kick)
+│       │   ├── SettingsPage.jsx           # Cài đặt kết nối Router, mẫu in thẻ, sao lưu router, bảo mật
+│       │   └── LoginPage.jsx              # Đăng nhập quản trị viên
+│       ├── components/          # Layout, ConnectionStatus, Modal, Spinner, StatCard, CustomSelect
 │       ├── hooks/               # useApi, useAuth, useEventSource
 │       └── utils/format.js      # Định dạng thời lượng / dung lượng
 ├── scripts/
@@ -125,17 +128,21 @@ wifi_hostpost_web/
 
 ## 📬 API endpoints (backend proxy `:3000`)
 
-| Method | Endpoint           | MikroTik REST target          | Mô tả                      |
-|--------|--------------------|-------------------------------|----------------------------|
-| GET    | `/api/health`      | —                              | Kiểm tra proxy + cấu hình  |
-| GET    | `/api/stats`       | `/ip/hotspot/user` + `/active` + `/user/profile` | Thống kê tổng quan |
-| GET    | `/api/users`       | `/ip/hotspot/user`             | Danh sách user             |
-| POST   | `/api/users`       | `/ip/hotspot/user`             | Tạo user                   |
-| PUT    | `/api/users/:id`   | `/ip/hotspot/user/:id`         | Sửa user (bỏ field rỗng)   |
-| DELETE | `/api/users/:id`   | `/ip/hotspot/user/:id`         | Xóa user                   |
-| GET    | `/api/profiles`    | `/ip/hotspot/user/profile`     | Danh sách profile          |
-| GET    | `/api/active`      | `/ip/hotspot/active`           | Phiên đang hoạt động       |
-| DELETE | `/api/active/:id`  | `/ip/hotspot/active/:id`       | Ngắt phiên (kick)          |
+| Method | Endpoint           | Target / Mô tả                                      |
+|--------|--------------------|-----------------------------------------------------|
+| GET    | `/api/health`      | Kiểm tra proxy + cấu hình                           |
+| GET    | `/api/stats`       | Thống kê tổng quan Hotspot                          |
+| GET    | `/api/performance/system` | Số liệu tài nguyên RouterOS (CPU, RAM, HDD, Nhiệt độ) |
+| GET    | `/api/proxmox/summary`    | Tóm tắt hiệu năng Node, VMs, LXCs, ZFS, Bridges    |
+| GET    | `/api/proxmox/events`     | Server-Sent Events (SSE) phát metrics Proxmox real-time |
+| POST   | `/api/proxmox/guests/:type/:vmid/action` | Thao tác bật (start) / tắt (stop) / reboot máy ảo/LXC |
+| GET    | `/api/users`       | Danh sách người dùng Hotspot                        |
+| POST   | `/api/users`       | Tạo user Hotspot mới                                |
+| PUT    | `/api/users/:id`   | Sửa user Hotspot                                    |
+| DELETE | `/api/users/:id`   | Xóa user Hotspot                                    |
+| GET    | `/api/profiles`    | Danh sách profile gói cước Hotspot                  |
+| GET    | `/api/active`      | Phiên đang hoạt động Hotspot                        |
+| DELETE | `/api/active/:id`  | Ngắt phiên (kick)                                   |
 ---
 
 ## ⚙️ Cấu hình MikroTik (RouterOS 7)
@@ -628,6 +635,32 @@ curl -u admin:matkhau http://192.168.88.1/rest/ip/hotspot/user
    - Trước khi sửa đổi bất kỳ logic frontend hoặc backend nào, bắt buộc rà soát toàn bộ các luồng phụ thuộc, tham số truyền vào/trả về, state và sự kiện liên quan để không gây ảnh hưởng (side-effects) đến các tính năng đã chạy thành công trước đó.
 2. **Kiểm tra Toàn vẹn Liên tục**:
    - Mọi thay đổi đều được kiểm tra biên dịch (`npm run build`), kiểm tra API và kiểm tra giao diện để đảm bảo tính ổn định và liên tục 100%.
+
+### Phiên 30 (2026-09-09) — Tích hợp Dashboard Giám sát Hiệu năng Hypervisor Proxmox VE (Real-time Mock Engine)
+1. **Mock Proxmox VE 8.x Engine (`backend/mock-proxmox.js`)**:
+   - Xây dựng module giả lập hoàn chỉnh cụm máy chủ ảo hóa Proxmox VE với cấu hình phần cứng chân thực: Intel Xeon E-2288G (8C/16T), 64GB DDR4 ECC RAM, ZFS NVMe Pool (2TB), Linux Bridges (`vmbr0`, `vmbr1` 10GbE SFP+).
+   - Giả lập danh sách máy ảo KVM & container LXC thực tế:
+     - **VM 100: MikroTik-CHR-Hotspot** (RouterOS 7.16 Cloud Hosted Router phát WiFi Hotspot & định tuyến VLAN).
+     - **VM 101: Ubuntu-Docker-Services** (Portainer, Nginx Proxy Manager, Grafana).
+     - **VM 102: WinServer-2022-AD** (Active Directory Domain Controller & File Server).
+     - **VM 103: pfSense-Firewall-Backup** (Tường lửa dự phòng).
+     - **LXC 200: NodeJS-Backend-Proxy** (Alpine Linux chạy Express proxy).
+     - **LXC 201: Pihole-AdGuard-DNS** (Debian chặn quảng cáo và phân giải DNS nội bộ).
+     - **LXC 202: PostgreSQL-16-Cluster** (Cơ sở dữ liệu lưu trữ nhật ký truy cập Hotspot & Billing).
+   - Mô phỏng biến thiên CPU/RAM/Băng thông mạng mượt mà, hỗ trợ API điều khiển bật (`start`), tắt (`stop`), khởi động lại (`reboot`) máy ảo và container theo thời gian thực.
+2. **Backend API Endpoints (`backend/server.js`)**:
+   - `GET /api/proxmox/summary`: Lấy toàn bộ cấu hình node, storage pools, bridges và danh sách guest.
+   - `GET /api/proxmox/events`: Server-Sent Events (SSE) phát sóng liên tục số liệu hiệu năng theo chu kỳ cấu hình (1s, 1.5s, 3s).
+   - `POST /api/proxmox/guests/:type/:vmid/action`: Thực hiện hành động `start` / `stop` / `reboot` trên máy ảo/container.
+3. **Frontend Dashboard Proxmox VE (`ProxmoxPerformancePage.jsx`)**:
+   - Thiết kế chuẩn **Neon Glass Light**:
+     - **6 KPI Metric Cards**: CPU Node, RAM Usage (kèm KSM), ZFS Pool Usage, Load Average (1m/5m/15m + IO Wait + SWAP), Băng thông Mạng tổng hợp (Download/Upload), Thống kê số lượng máy ảo & container đang chạy/tắt.
+     - **2 Biểu đồ Spline Vector SVG Real-time**: Đồ thị Tải CPU & RAM (30 điểm lịch sử) và Đồ thị Băng thông Mạng qua Bridges `vmbr0`/`vmbr1`.
+     - **Bảng Quản trị Máy ảo & Container**: Phân loại KVM/LXC, tìm kiếm nhanh, hiển thị % vCPU, RAM thực/cấp phát, lưu lượng mạng Rx/Tx, Uptime và các nút tương tác nhanh (Reboot, Stop, Start).
+     - **Khối Phân vùng Ổ cứng (Storage Pools)**: Trực quan hóa dung lượng ZFS pool, local rootfs và Proxmox Backup Server (PBS).
+     - **Khối Cổng Mạng & Linux Bridges**: Hiển thị trạng thái cổng mạng vật lý và virtual bridges kèm cấu hình VLAN Trunking.
+   - Thêm nút điều hướng **🖥️ Proxmox VE** vào thanh menu chính (`Layout.jsx`) và định tuyến `/proxmox` trong `App.jsx`.
+   - Biên dịch Vite thành công 100%, kiểm thử tương tác máy ảo và biểu đồ thời gian thực trực tiếp trên trình duyệt.
 
 ---
 

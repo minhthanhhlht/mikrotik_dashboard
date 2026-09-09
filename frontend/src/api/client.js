@@ -134,4 +134,12 @@ export const api = {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   },
+
+  // Proxmox VE Hypervisor Performance & Guests
+  proxmoxSummary: () => request('/proxmox/summary'),
+  proxmoxGuestAction: (type, vmid, action) =>
+    request(`/proxmox/guests/${encodeURIComponent(type)}/${encodeURIComponent(vmid)}/action`, {
+      method: 'POST',
+      body: { action },
+    }),
 };

@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Writable } from 'node:stream';
 import ftp from 'basic-ftp';
+import { getMockProxmoxSummary, executeMockProxmoxAction } from './mock-proxmox.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1026,6 +1027,93 @@ app.delete('/api/router/backups/:id', requireRole(['admin']), async (req, res) =
     res.json({ ok: true });
   } catch (err) {
     res.status(err.status || 500).json({ error: 'Không thể xóa file sao lưu: ' + err.message });
+  }
+});
+
+// ----------------------------------------------------------------------------
+// PROXMOX VE HYPERVISOR PERFORMANCE & MONITORING API
+// ----------------------------------------------------------------------------
+const {
+  PROXMOX_HOST,
+  PROXMOX_PORT = '8006',
+  PROXMOX_TOKEN_ID,
+  PROXMOX_TOKEN_SECRET,
+} = process.env;
+
+// Lấy tóm tắt hiệu năng Proxmox VE (Real hoặc Mock)
+app.get('/api/proxmox/summary', async (req, res) => {
+  try {
+    if (PROXMOX_HOST && PROXMOX_TOKEN_ID && PROXMOX_TOKEN_SECRET) {
+      // Kết nối Proxmox VE thật qua REST API
+      const authHeader = `PVEAPIToken=${PROXMOX_TOKEN_ID}=${PROXMOX_TOKEN_SECRET}`;
+      const baseUrl = `https://${PROXMOX_HOST}:${PROXMOX_PORT}/api2/json`;
+      const opt = {
+        headers: { Authorization: authHeader },
+        // Bỏ qua chứng chỉ SSL tự ký của Proxmox
+        signal: AbortSignal.timeout(5000),
+      };
+      // Gọi API PVE thực tế
+      const [nodesRes, versionRes] = await Promise.all([
+        fetch(`${baseUrl}/nodes`, opt).then((r) => r.json()).catch(() => null),
+        fetch(`${baseUrl}/version`, opt).then((r) => r.json()).catch(() => null),
+      ]);
+      if (nodesRes && nodesRes.data) {
+        return res.json({
+          mode: 'real',
+          host: PROXMOX_HOST,
+          version: versionRes?.data?.version || '8.x',
+          nodes: nodesRes.data,
+        });
+      }
+    }
+
+    // Mặc định hoặc chế độ giả lập Mock
+    const mockData = getMockProxmoxSummary();
+    res.json(mockData);
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi lấy dữ liệu Proxmox VE: ' + err.message });
+  }
+});
+
+// Luồng Server-Sent Events (SSE) đẩy dữ liệu Proxmox VE thời gian thực
+app.get('/api/proxmox/events', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+  });
+
+  // Gửi gói đầu tiên ngay khi kết nối
+  try {
+    const initial = getMockProxmoxSummary();
+    res.write(`data: ${JSON.stringify(initial)}\n\n`);
+  } catch {}
+
+  const intervalMs = 1500; // 1.5 giây một lần
+  const timer = setInterval(() => {
+    try {
+      const payload = getMockProxmoxSummary();
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    } catch {
+      clearInterval(timer);
+    }
+  }, intervalMs);
+
+  req.on('close', () => {
+    clearInterval(timer);
+  });
+});
+
+// Thực hiện tác vụ điều khiển máy ảo / container (start, stop, reboot)
+app.post('/api/proxmox/guests/:type/:vmid/action', (req, res) => {
+  const { type, vmid } = req.params;
+  const { action } = req.body;
+  try {
+    const result = executeMockProxmoxAction(type, vmid, action);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 
