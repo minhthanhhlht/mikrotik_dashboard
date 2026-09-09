@@ -605,6 +605,20 @@ curl -u admin:matkhau http://192.168.88.1/rest/ip/hotspot/user
    - Thêm/sửa cấu hình Profile đầy đủ các trường RouterOS.
    - Modal xác nhận xóa cảnh báo chi tiết nếu đang có tài khoản người dùng hoạt động thuộc hồ sơ đó.
 
+### Phiên 28 (2026-09-09) — Chuẩn hóa & Nâng cấp Toàn diện Giao diện Dropdown List (CustomSelect)
+1. **Xây dựng Component `CustomSelect.jsx` (Neon Glass Light Dropdown)**:
+   - Thay thế toàn bộ thẻ `<select>` mặc định của trình duyệt (vốn bị vuông góc, viền thô và nền hệ điều hành xanh đậm).
+   - Thiết kế popover kính mờ `backdrop-blur-2xl`, bo tròn `rounded-2xl`, hiệu ứng đổ bóng Neon Blue `shadow-[0_16px_40px_rgba(0,132,255,0.18)]`, mũi tên chevron xoay hoạt họa mượt mà.
+   - Hỗ trợ Icon đại diện, Subtitle/Ghi chú phụ, Badge đếm số lượng người dùng/gói cước, Checkmark `✓` đánh dấu lựa chọn hiện tại.
+   - Tự động đóng popover khi nhấp chuột ra ngoài (click outside) và hỗ trợ điều hướng phím (Escape, Enter).
+2. **Áp dụng Đồng bộ Toàn Hệ thống**:
+   - **Trang Người dùng (`UsersPage.jsx`)**:
+     - Dropdown Lọc Profile: Hiển thị tên gói cước kèm badge số lượng user thực tế (`👥 X users`).
+     - Dropdown Chọn Profile trong Modal Thêm/Sửa User: Hiển thị thông số tốc độ `rate-limit` và nhãn `default`.
+   - **Trang Cài đặt (`SettingsPage.jsx`)**:
+     - Dropdown Chọn Tài khoản Router điền mẫu in thẻ: Hiển thị icon `👤`, tên tài khoản, mật khẩu kèm badge gói cước.
+     - Dropdown Phân nhóm quyền Hệ thống (`admin-user-group`): Hiển thị icon `👑`/`✍️`/`👁️`, quyền chi tiết và badge phân quyền rõ ràng.
+
 ---
 
 ```bash

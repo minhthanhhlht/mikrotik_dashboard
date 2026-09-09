@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth.jsx';
 import { useToast } from '../hooks/useToast.jsx';
 import Modal from '../components/Modal.jsx';
 import Spinner from '../components/Spinner.jsx';
+import CustomSelect from '../components/CustomSelect.jsx';
 import { formatBytes, formatDuration } from '../utils/format.js';
 
 // Form mặc định user (key trùng tên property trong MikroTik REST API)
@@ -553,20 +554,25 @@ export default function UsersPage() {
                 />
               </div>
 
-              <select
+              <CustomSelect
                 id="users-profile-filter"
                 name="usersProfileFilter"
                 value={profileFilter}
                 onChange={(e) => setProfileFilter(e.target.value)}
-                className={`${selectField} w-44`}
-              >
-                <option value="">Tất cả profile</option>
-                {profileNames.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
+                placeholder="Tất cả profile"
+                className="w-48"
+                options={[
+                  { value: '', label: 'Tất cả profile', badge: `${users.length}` },
+                  ...profileNames.map((p) => {
+                    const count = users.filter((u) => profileOf(u) === p).length;
+                    return {
+                      value: p,
+                      label: p,
+                      badge: `${count} user${count > 1 ? 's' : ''}`,
+                    };
+                  }),
+                ]}
+              />
 
               <button
                 type="button"
@@ -972,20 +978,29 @@ export default function UsersPage() {
                 </div>
               }
             >
-              <select
+              <CustomSelect
                 id="user-profile"
                 name="profile"
-                className={selectField}
                 value={form.profile}
                 onChange={(e) => set('profile', e.target.value)}
-              >
-                {profileNames.length === 0 && <option value="">Không có profile</option>}
-                {profileNames.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
+                placeholder="Chọn hồ sơ gói cước…"
+                className="w-full"
+                options={
+                  profileNames.length === 0
+                    ? [{ value: '', label: 'Chưa có profile nào trên Router' }]
+                    : profileNames.map((p) => {
+                        const prof = profiles.find((item) => item.name === p);
+                        return {
+                          value: p,
+                          label: p,
+                          sublabel: prof?.['rate-limit']
+                            ? `Tốc độ: ${prof['rate-limit']}`
+                            : 'Không giới hạn tốc độ',
+                          badge: prof?.default === 'true' ? 'default' : '',
+                        };
+                      })
+                }
+              />
             </Field>
           </div>
 

@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth.jsx';
 import { useToast } from '../hooks/useToast.jsx';
 import Spinner from '../components/Spinner.jsx';
 import Modal from '../components/Modal.jsx';
+import CustomSelect from '../components/CustomSelect.jsx';
 import { formatBytes, formatDuration } from '../utils/format.js';
 
 const EMPTY_USER_FORM = {
@@ -778,29 +779,32 @@ export default function SettingsPage() {
                 </button>
               </div>
 
-              <select
+              <CustomSelect
                 id="select-hotspot-user"
                 aria-label="Chọn tài khoản Hotspot từ Router"
-                className="input-ghost w-full font-mono text-xs font-semibold"
+                className="w-full"
+                buttonClassName="font-mono text-xs"
+                placeholder={
+                  loadingHotspotUsers
+                    ? 'Đang tải danh sách tài khoản từ Router MikroTik…'
+                    : hotspotUsers.length === 0
+                    ? '-- Không có tài khoản nào trên Router --'
+                    : `-- Chọn tài khoản từ danh sách Router (${hotspotUsers.length} tài khoản) --`
+                }
+                searchable={hotspotUsers.length > 4}
                 value={
                   selectedHotspotUser ||
                   (hotspotUsers.find((u) => u.name === voucherSettings.sampleUser)?.name || '')
                 }
                 onChange={handleSelectHotspotUser}
-              >
-                <option value="">
-                  {loadingHotspotUsers
-                    ? 'Đang tải danh sách tài khoản từ Router MikroTik…'
-                    : hotspotUsers.length === 0
-                    ? '-- Không có tài khoản nào trên Router --'
-                    : `-- Chọn tài khoản từ danh sách Router (${hotspotUsers.length} tài khoản) --`}
-                </option>
-                {hotspotUsers.map((u) => (
-                  <option key={u['.id'] || u.name} value={u.name}>
-                    👤 {u.name} {u.password ? `| Pass: ${u.password}` : '| (Không mật khẩu)'} {u.profile ? `[Gói: ${u.profile}]` : ''} {u.comment ? `(${u.comment})` : ''}
-                  </option>
-                ))}
-              </select>
+                options={hotspotUsers.map((u) => ({
+                  value: u.name,
+                  label: u.name,
+                  sublabel: `Pass: ${u.password || '(Trống)'}${u.comment ? ` · ${u.comment}` : ''}`,
+                  badge: u.profile || '',
+                  icon: '👤',
+                }))}
+              />
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 pt-1">
                 <label className="block">
@@ -1474,20 +1478,39 @@ export default function SettingsPage() {
             />
           </label>
 
-          <label className="block">
+          <div>
             <span className="label-caps mb-1.5 block text-xs">Nhóm quyền MikroTik (Group) *</span>
-            <select
+            <CustomSelect
               id="admin-user-group"
               name="adminGroup"
-              className="input-ghost w-full px-3 py-2.5 text-sm font-medium"
+              className="w-full"
               value={userForm.group}
               onChange={(e) => setUserForm({ ...userForm, group: e.target.value })}
-            >
-              <option value="full">👑 full — Quản trị viên (Toàn quyền quản trị Router & Dashboard)</option>
-              <option value="write">✍️ write — Nhân viên vận hành (Cấp voucher, gia hạn, ngắt kết nối)</option>
-              <option value="read">👁️ read — Giám sát viên (Chỉ xem số liệu, không chỉnh sửa)</option>
-            </select>
-          </label>
+              options={[
+                {
+                  value: 'full',
+                  label: 'full — Quản trị viên cao cấp',
+                  sublabel: 'Toàn quyền quản trị RouterOS & Quản trị Dashboard',
+                  icon: '👑',
+                  badge: 'Toàn quyền',
+                },
+                {
+                  value: 'write',
+                  label: 'write — Nhân viên vận hành',
+                  sublabel: 'Cấp voucher, gia hạn thời gian, ngắt kết nối phiên',
+                  icon: '✍️',
+                  badge: 'Vận hành',
+                },
+                {
+                  value: 'read',
+                  label: 'read — Giám sát viên',
+                  sublabel: 'Chỉ xem số liệu thống kê, không được phép chỉnh sửa',
+                  icon: '👁️',
+                  badge: 'Chỉ xem',
+                },
+              ]}
+            />
+          </div>
         </form>
       </Modal>
 
