@@ -1140,12 +1140,13 @@ export default function SettingsPage() {
               <button
                 type="submit"
                 disabled={backupBusy}
-                className="btn-primary w-full py-2.5 text-xs font-bold shadow-md"
+                className="btn-primary w-full justify-center py-2.5 text-xs font-bold shadow-md"
               >
                 {backupBusy ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <Spinner size="sm" /> Đang xử lý sao lưu RouterOS…
-                  </span>
+                  <>
+                    <Spinner size="sm" />
+                    <span>Đang xử lý sao lưu RouterOS…</span>
+                  </>
                 ) : backupForm.type === 'rsc' ? (
                   '💾 Xuất & Tải về Máy tính (.rsc)'
                 ) : (

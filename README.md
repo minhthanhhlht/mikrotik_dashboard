@@ -584,6 +584,13 @@ curl -u admin:matkhau http://192.168.88.1/rest/ip/hotspot/user
    - Nghiêm cấm mọi hành vi tự động duyệt hoặc tự ý xóa bất kỳ file mã nguồn, tài nguyên, cấu hình nào của dự án nếu chưa có phê duyệt trực tiếp của người dùng.
    - Ngoại lệ duy nhất được phép tự dọn dẹp: các file tạm do chính AI tạo ra để kiểm thử UI hoặc Backend.
 
+### Phiên 26 (2026-09-09) — Chuẩn hóa Kích thước Inline Spinner & Tối ưu Nút Bấm Đang Xử lý Sao lưu Router
+1. **Khắc phục lỗi chiều cao nút bấm (Button Height Overflow)**:
+   - Nguyên nhân: Component `Spinner` trước đó mặc định có padding `py-12` và kích thước `h-10 w-10`, khi đặt trong nút bấm làm đội chiều cao nút lên quá lớn (> 130px).
+   - Giải pháp: Nâng cấp [`Spinner.jsx`](file:///d:/mikrotik/wifi_hostpost_web/frontend/src/components/Spinner.jsx) hỗ trợ các kích thước inline `size="sm"` (16px) và `size="xs"` (14px) với viền quay mượt mà, không kèm padding lớn.
+2. **Tối ưu Giao diện Nút Sao lưu & Tải về (`SettingsPage.jsx`)**:
+   - Căn giữa nội dung chuẩn xác (`justify-center`), giữ nguyên kích thước chiều cao chuẩn của nút khi ở trạng thái đang xử lý sao lưu RouterOS.
+
 ---
 
 ```bash
