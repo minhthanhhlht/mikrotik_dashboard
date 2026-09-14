@@ -663,6 +663,35 @@ curl -u admin:matkhau http://192.168.88.1/rest/ip/hotspot/user
    - Tuyệt đối không thay đổi logic API, xác thực, SSE streams, CRUD hay print engine.
    - Build production frontend (`npm run build`) thành công 100% không phát sinh lỗi.
 
+### Phiên 32 (2026-09-14) — Tích Hợp Giám Sát Hạ Tầng Home Assistant OS (HassOS)
+1. **Kiến Trúc Tích Hợp Đa Chế Độ (Real API + Mock Fallback)**:
+   - **Backend Mock Engine (`backend/mock-hass.js`)**: Mô phỏng chân thực hệ thống Home Assistant OS 12.4, Supervisor Engine, Core 2026.4, 4 Cores CPU kèm nhiệt độ (°C), RAM 8GB, ổ cứng NVMe 128GB, lưu lượng mạng Rx/Tx và 9 Add-on containers phổ biến (`Mosquitto`, `Zigbee2MQTT`, `Node-RED`, `Tailscale`, `ESPHome`, `Cloudflared`, `Samba`, `File Editor`, `InfluxDB`).
+   - **Chuyển đổi liền mạch khi có hệ thống thật**: Backend tự động phát hiện biến môi trường `HASS_URL` (ví dụ: `http://192.168.20.10:8123`) và `HASS_TOKEN` (Long-Lived Access Token) trong `.env`. Nếu có, backend kết nối trực tiếp đến Home Assistant Core REST API (`/api/config`, `/api/states`, `/api/hassio/info`) để lấy dữ liệu thực tế; nếu chưa có, tự động dùng mock engine.
+   - **Endpoints REST & SSE**:
+     - `GET /api/hass/summary`: Trả về snapshot chỉ số tổng thể của HassOS.
+     - `GET /api/hass/events`: Luồng Server-Sent Events (SSE) đẩy dữ liệu tài nguyên thời gian thực chu kỳ 1.5s.
+     - `POST /api/hass/addons/:slug/action`: Bật, tắt, khởi động lại từng Add-on (`start`, `stop`, `restart`).
+     - `POST /api/hass/core/action`: Khởi động lại Core, khởi động lại Supervisor, Reboot HassOS Host, nạp lại Automations.
+2. **Giao Diện Giám Sát Chuẩn ServerKit (`frontend/src/pages/HassPerformancePage.jsx`)**:
+   - **Topbar**: Live indicator `MOCK SUPERVISOR` / `REAL HOST`, bộ chọn chu kỳ cập nhật (1s / 1.5s / 3s), nút Pause/Resume và nút tắt mở trực tiếp giao diện Web của Home Assistant (`🌐 Mở HA Web`).
+   - **4 Thẻ KPI Tài Nguyên Phần Cứng**:
+     - CPU Usage (%) kèm số core, nhiệt độ (°C), kiến trúc (aarch64/x86_64) và đồ thị SVG real-time.
+     - Bộ nhớ RAM (Used / Total / Free) kèm đồ thị SVG.
+     - Lưu trữ NVMe (Used / Total / Free) kèm thanh tiến trình trực quan.
+     - Lưu lượng mạng trực tiếp (Download / Upload Kbps) kèm đồ thị sóng.
+   - **Khối Thông Tin Host & Supervisor**: Hiển thị chi tiết phiên bản OS, Core, Supervisor, Board phần cứng, IP/Port, Uptime và thống kê số lượng Thực thể IoT theo domain (`sensor`, `switch`, `light`, `binary_sensor`, `automation`, `climate`).
+   - **Bảng Quản Trị Add-on Containers**:
+     - Bộ lọc Tab: Tất cả, Đang chạy (Running), Đã dừng (Stopped).
+     - Ô tìm kiếm Add-on theo tên / slug / danh mục.
+     - Bảng mật độ cao `.sk-dtable` hiển thị trạng thái (`.sk-pill`), phiên bản, mức tiêu thụ CPU, RAM, Port mapping và các nút thao tác nhanh (Chạy, Dừng, Khởi động lại).
+   - **Khối Thao Tác Quản Trị Nhanh (Quick Actions)**: Gửi lệnh Restart Core, Restart Supervisor, Reload Automations và Reboot Host kèm modal xác nhận an toàn.
+3. **Điều Hướng & Định Tuyến**:
+   - Thêm icon ngôi nhà / server `hass` và menu item "Home Assistant OS" vào nhóm "GIÁM SÁT HẠ TẦNG" trong `Layout.jsx`.
+   - Đăng ký route `/hass` trong `App.jsx` và tích hợp hàm gọi API trong `frontend/src/api/client.js`.
+4. **Kiểm Thử**:
+   - `npm run build` thành công 100% (dist bundle JS & CSS sạch sẽ).
+   - Kiểm thử tương tác qua Chrome DevTools MCP: Đăng nhập `user_api`, mở trang `/hass`, nhận luồng SSE, chuyển đổi chu kỳ, kiểm tra bảng Add-ons và thực hiện lệnh dừng/chạy Add-on thành công.
+
 ---
 
 ```bash

@@ -49,6 +49,12 @@ const icons = {
       <path d="M11 6.5h7M11 17.5h7" />
     </svg>
   ),
+  hass: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+      <path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1v-9.5z" />
+      <path d="M9 21V12h6v9" />
+    </svg>
+  ),
   router: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
       <rect x="3" y="8" width="18" height="8" rx="2" />
@@ -90,6 +96,7 @@ const NAV_GROUPS = [
     items: [
       { to: '/performance', label: 'Hiệu năng RouterOS', icon: 'performance', end: true },
       { to: '/proxmox', label: 'Proxmox Hypervisor', icon: 'proxmox', end: true },
+      { to: '/hass', label: 'Home Assistant OS', icon: 'hass', end: true },
     ],
   },
   {

@@ -142,4 +142,17 @@ export const api = {
       method: 'POST',
       body: { action },
     }),
+
+  // Home Assistant OS (HassOS) Performance, Add-ons & Core
+  hassSummary: () => request('/hass/summary'),
+  hassAddonAction: (slug, action) =>
+    request(`/hass/addons/${encodeURIComponent(slug)}/action`, {
+      method: 'POST',
+      body: { action },
+    }),
+  hassCoreAction: (action) =>
+    request('/hass/core/action', {
+      method: 'POST',
+      body: { action },
+    }),
 };

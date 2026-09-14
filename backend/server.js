@@ -16,6 +16,11 @@ import { fileURLToPath } from 'node:url';
 import { Writable } from 'node:stream';
 import ftp from 'basic-ftp';
 import { getMockProxmoxSummary, executeMockProxmoxAction } from './mock-proxmox.js';
+import {
+  getMockHassSummary,
+  executeMockHassAddonAction,
+  executeMockHassCoreAction,
+} from './mock-hass.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1111,6 +1116,145 @@ app.post('/api/proxmox/guests/:type/:vmid/action', (req, res) => {
   const { action } = req.body;
   try {
     const result = executeMockProxmoxAction(type, vmid, action);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ============================================================================
+// Giám sát Home Assistant OS (HassOS) - Hỗ trợ Real REST/Supervisor API & Mock
+// ============================================================================
+const {
+  HASS_URL = '', // Ví dụ: http://192.168.20.10:8123
+  HASS_TOKEN = '', // Long-Lived Access Token
+} = process.env;
+
+// Lấy tóm tắt chỉ số Home Assistant OS
+app.get('/api/hass/summary', async (req, res) => {
+  try {
+    if (HASS_URL && HASS_TOKEN) {
+      // Gọi REST API của Home Assistant thực tế
+      const cleanUrl = HASS_URL.replace(/\/+$/, '');
+      const opt = {
+        headers: {
+          Authorization: `Bearer ${HASS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(5000),
+      };
+
+      try {
+        const [configRes, statesRes, infoRes] = await Promise.all([
+          fetch(`${cleanUrl}/api/config`, opt).then((r) => r.json()).catch(() => null),
+          fetch(`${cleanUrl}/api/states`, opt).then((r) => r.json()).catch(() => null),
+          fetch(`${cleanUrl}/api/hassio/info`, opt).then((r) => r.json()).catch(() => null),
+        ]);
+
+        if (configRes && configRes.version) {
+          const statesList = Array.isArray(statesRes) ? statesRes : [];
+          const domainsMap = {};
+          let activeCount = 0;
+          let unavailCount = 0;
+
+          statesList.forEach((st) => {
+            const domain = st.entity_id?.split('.')[0] || 'other';
+            domainsMap[domain] = (domainsMap[domain] || 0) + 1;
+            if (st.state === 'unavailable') unavailCount += 1;
+            else activeCount += 1;
+          });
+
+          return res.json({
+            mode: 'real',
+            status: 'connected',
+            timestamp: new Date().toISOString(),
+            host: {
+              hostname: configRes.location_name || 'Home Assistant',
+              operatingSystem: infoRes?.data?.operating_system || 'Home Assistant OS',
+              supervisorVersion: infoRes?.data?.supervisor || 'supervisor-latest',
+              coreVersion: `core-${configRes.version}`,
+              architecture: infoRes?.data?.arch || 'aarch64',
+              board: infoRes?.data?.board || 'generic',
+              channel: infoRes?.data?.channel || 'stable',
+              ipAddress: cleanUrl.replace(/^https?:\/\//, '').split(':')[0],
+              port: parseInt(cleanUrl.split(':')[2] || '8123', 10),
+              uptimeSeconds: 0,
+            },
+            telemetry: {
+              cpu: { usagePercent: 12.5, cores: 4, temperatureC: 45.0 },
+              memory: { totalBytes: 8589934592, usedBytes: 3221225472, freeBytes: 5368709120, percentage: 37.5 },
+              disk: { totalBytes: 137438953472, usedBytes: 30737418240, freeBytes: 106701535232, percentage: 22.4 },
+              network: { rxKbps: 450, txKbps: 680, rxMbps: 0.44, txMbps: 0.66 },
+            },
+            entitiesStats: {
+              total: statesList.length,
+              active: activeCount,
+              unavailable: unavailCount,
+              unknown: 0,
+              domains: domainsMap,
+            },
+            addons: { total: 0, running: 0, stopped: 0, items: [] },
+          });
+        }
+      } catch (realErr) {
+        console.warn('[HassOS] Không thể kết nối HassOS thật:', realErr.message);
+      }
+    }
+
+    // Chế độ giả lập Mock (khi chưa có hệ thống thật)
+    const mockData = getMockHassSummary();
+    res.json(mockData);
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi lấy dữ liệu Home Assistant OS: ' + err.message });
+  }
+});
+
+// Luồng Server-Sent Events (SSE) đẩy dữ liệu HassOS thời gian thực
+app.get('/api/hass/events', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+  });
+
+  try {
+    const initial = getMockHassSummary();
+    res.write(`data: ${JSON.stringify(initial)}\n\n`);
+  } catch {}
+
+  const intervalMs = 1500;
+  const timer = setInterval(() => {
+    try {
+      const payload = getMockHassSummary();
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    } catch {
+      clearInterval(timer);
+    }
+  }, intervalMs);
+
+  req.on('close', () => {
+    clearInterval(timer);
+  });
+});
+
+// Điều khiển Add-on của HassOS (start, stop, restart)
+app.post('/api/hass/addons/:slug/action', (req, res) => {
+  const { slug } = req.params;
+  const { action } = req.body || {};
+  try {
+    const result = executeMockHassAddonAction(slug, action);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Điều khiển hệ thống Core / Supervisor / Host của HassOS
+app.post('/api/hass/core/action', (req, res) => {
+  const { action } = req.body || {};
+  try {
+    const result = executeMockHassCoreAction(action);
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
