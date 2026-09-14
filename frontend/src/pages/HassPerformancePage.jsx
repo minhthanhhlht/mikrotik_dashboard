@@ -22,6 +22,13 @@ export default function HassPerformancePage() {
   const [actionBusySlug, setActionBusySlug] = useState(null);
   const [coreActionBusy, setCoreActionBusy] = useState(false);
 
+  // Chọn hàng loạt (Floating BulkBar)
+  const [selectedSlugs, setSelectedSlugs] = useState([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  // Drawer xem chi tiết Add-on
+  const [activeDrawerAddon, setActiveDrawerAddon] = useState(null);
+
   // Modal xác nhận thao tác Core / Host
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
@@ -118,7 +125,7 @@ export default function HassPerformancePage() {
     };
   }, [isPaused, streamInterval]);
 
-  // Thao tác Add-on
+  // Thao tác Add-on đơn lẻ
   async function handleAddonAction(slug, action, addonName) {
     setActionBusySlug(slug);
     try {
@@ -126,10 +133,38 @@ export default function HassPerformancePage() {
       toast.success(res.message || `Đã thực hiện '${action}' cho ${addonName}`);
       const fresh = await api.hassSummary();
       setData(fresh);
+      if (activeDrawerAddon?.slug === slug) {
+        const updated = fresh?.addons?.items?.find((a) => a.slug === slug);
+        if (updated) setActiveDrawerAddon(updated);
+      }
     } catch (err) {
       toast.error(err.message || `Lỗi khi thực hiện '${action}'`);
     } finally {
       setActionBusySlug(null);
+    }
+  }
+
+  // Thao tác hàng loạt (Bulk Actions)
+  async function handleBulkAction(action) {
+    if (selectedSlugs.length === 0) return;
+    setBulkBusy(true);
+    let successCount = 0;
+    try {
+      for (const slug of selectedSlugs) {
+        const ad = data?.addons?.items?.find((a) => a.slug === slug);
+        try {
+          await api.hassAddonAction(slug, action);
+          successCount++;
+        } catch {}
+      }
+      toast.success(`Đã thực hiện '${action}' thành công cho ${successCount}/${selectedSlugs.length} add-on.`);
+      setSelectedSlugs([]);
+      const fresh = await api.hassSummary();
+      setData(fresh);
+    } catch (err) {
+      toast.error('Lỗi khi thực hiện thao tác hàng loạt.');
+    } finally {
+      setBulkBusy(false);
     }
   }
 
@@ -187,18 +222,38 @@ export default function HassPerformancePage() {
     return list;
   }, [data, addonTab, addonSearch]);
 
+  const allFilteredSelected = useMemo(() => {
+    if (filteredAddons.length === 0) return false;
+    return filteredAddons.every((a) => selectedSlugs.includes(a.slug));
+  }, [filteredAddons, selectedSlugs]);
+
+  function toggleSelectAll() {
+    if (allFilteredSelected) {
+      setSelectedSlugs((prev) => prev.filter((s) => !filteredAddons.some((a) => a.slug === s)));
+    } else {
+      const newSlugs = [...new Set([...selectedSlugs, ...filteredAddons.map((a) => a.slug)])];
+      setSelectedSlugs(newSlugs);
+    }
+  }
+
+  function toggleSelectOne(slug) {
+    setSelectedSlugs((prev) =>
+      prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]
+    );
+  }
+
   const host = data?.host;
   const telemetry = data?.telemetry;
   const entitiesStats = data?.entitiesStats;
 
   // Helper render đồ thị SVG đường sóng
-  function renderSvgPolyline(history, maxVal = 100, strokeColor = 'var(--sk-primary)', fillColor = 'var(--sk-primary-bg)') {
+  function renderSvgPolyline(history, maxVal = 100, strokeColor = 'var(--accent)', fillColor = 'var(--accent-bg)') {
     const w = 300;
-    const h = 70;
+    const h = 60;
     const points = history.map((val, idx) => {
       const x = (idx / (history.length - 1)) * w;
       const normalized = maxVal === 0 ? 0 : Math.min(100, Math.max(0, (val / maxVal) * 100));
-      const y = h - (normalized / 100) * (h - 10) - 5;
+      const y = h - (normalized / 100) * (h - 8) - 4;
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     });
 
@@ -206,54 +261,52 @@ export default function HassPerformancePage() {
     const areaPoints = `0,${h} ${pointsStr} ${w},${h}`;
 
     return (
-      <svg className="w-full h-[70px] overflow-visible" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
+      <svg className="w-full h-[60px] overflow-visible" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
         <polygon points={areaPoints} fill={fillColor} />
-        <polyline points={pointsStr} fill="none" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <polyline points={pointsStr} fill="none" stroke={strokeColor} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Header & Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--sk-border)] pb-4">
+      {/* 1. PageTopbar (.sk-topbar) theo chuẩn Section 4.2 */}
+      <div className="sk-topbar flex-wrap">
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-[var(--sk-text)] font-mono">
-              Home Assistant OS
-            </h1>
-            <span className="sk-pill running">
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--sk-success)] animate-pulse" />
+            <h1 className="sk-title">Home Assistant OS</h1>
+            <span className="sk-pill sk-pill--green">
+              <span className="sk-pill__dot" />
               {data?.mode === 'real' ? 'REAL HOST' : 'MOCK SUPERVISOR'}
             </span>
-            <span className="sk-tag">HassOS 12.4</span>
-            <span className="sk-tag">Core 2026.4</span>
+            <span className="sk-tag sk-tag--prod">HassOS 12.4</span>
+            <span className="sk-tag sk-tag--dev">Core 2026.4</span>
           </div>
-          <p className="text-xs text-[var(--sk-text-muted)] mt-1 font-mono">
-            Giám sát vi xử lý, RAM, NVMe, Add-on Containers và Thực thể IoT thời gian thực
+          <p className="sk-subtitle">
+            Bảng điều khiển giám sát hạ tầng Home Assistant OS · Realtime Supervisor Telemetry
           </p>
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center flex-wrap gap-2">
+        <div className="flex items-center flex-wrap gap-2.5">
           <div className="sk-seg">
             <button
               onClick={() => setStreamInterval(1000)}
-              className={streamInterval === 1000 ? 'active' : ''}
+              className={`sk-seg__btn ${streamInterval === 1000 ? 'is-on' : ''}`}
               title="Cập nhật mỗi 1 giây"
             >
               1s
             </button>
             <button
               onClick={() => setStreamInterval(1500)}
-              className={streamInterval === 1500 ? 'active' : ''}
+              className={`sk-seg__btn ${streamInterval === 1500 ? 'is-on' : ''}`}
               title="Cập nhật mỗi 1.5 giây"
             >
               1.5s
             </button>
             <button
               onClick={() => setStreamInterval(3000)}
-              className={streamInterval === 3000 ? 'active' : ''}
+              className={`sk-seg__btn ${streamInterval === 3000 ? 'is-on' : ''}`}
               title="Cập nhật mỗi 3 giây"
             >
               3s
@@ -262,7 +315,7 @@ export default function HassPerformancePage() {
 
           <button
             onClick={() => setIsPaused(!isPaused)}
-            className={`btn-ghost text-xs ${isPaused ? 'text-[var(--sk-warning)]' : ''}`}
+            className={`btn btn-ghost btn-sm ${isPaused ? 'text-[var(--amber)]' : ''}`}
           >
             {isPaused ? '▶ Tiếp tục' : '⏸ Tạm dừng'}
           </button>
@@ -270,7 +323,7 @@ export default function HassPerformancePage() {
           <button
             onClick={loadInitial}
             disabled={loading}
-            className="btn-ghost text-xs flex items-center gap-1.5"
+            className="btn btn-ghost btn-sm"
           >
             <span className={loading ? 'animate-spin' : ''}>⟳</span> Làm mới
           </button>
@@ -280,7 +333,7 @@ export default function HassPerformancePage() {
               href={`http://${host.ipAddress}:${host.port || 8123}`}
               target="_blank"
               rel="noreferrer"
-              className="btn-primary text-xs flex items-center gap-1.5 no-underline"
+              className="btn btn-primary btn-sm no-underline"
             >
               <span>🌐 Mở HA Web</span>
             </a>
@@ -289,7 +342,7 @@ export default function HassPerformancePage() {
       </div>
 
       {error && (
-        <div className="p-3.5 bg-[var(--sk-danger-bg)] border border-[var(--sk-danger)] rounded text-xs text-[var(--sk-danger)] flex items-center justify-between">
+        <div className="p-3.5 bg-[var(--red-bg)] border border-[var(--red)] rounded-[var(--radius-sm)] text-xs text-[var(--red)] flex items-center justify-between font-mono">
           <div className="flex items-center gap-2">
             <span>⚠</span>
             <span>{error}</span>
@@ -306,159 +359,171 @@ export default function HassPerformancePage() {
         </div>
       ) : (
         <>
-          {/* Top 4 KPI Resource Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* CPU Card */}
+          {/* 2. KPI Band (.sk-kpiband) theo chuẩn Section 5.5 */}
+          <div className="sk-kpiband">
+            {/* CPU KPI Tile */}
             <div className="sk-kpi">
-              <div className="flex items-center justify-between">
-                <span className="sk-kpi-label">BỘ VI XỬ LÝ (CPU)</span>
-                <span className="sk-tag">{telemetry?.cpu?.cores || 4} CORES</span>
+              <div className="sk-kpi__header">
+                <div className="sk-kpi__icon text-[var(--cyan)]">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                    <rect x="9" y="9" width="6" height="6" />
+                    <path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3" />
+                  </svg>
+                </div>
+                <span className="sk-state sk-state--cyan">{telemetry?.cpu?.cores || 4} CORES</span>
               </div>
-              <div className="flex items-baseline gap-2 mt-1">
-                <span className="sk-kpi-val text-[var(--sk-primary)]">
-                  {telemetry?.cpu?.usagePercent ?? 0}
-                </span>
-                <span className="text-xs font-mono text-[var(--sk-text-muted)]">%</span>
+              <div className="sk-kpi__value text-[var(--cyan)]">
+                {telemetry?.cpu?.usagePercent ?? 0}<span className="text-xs text-[var(--text-dim)] font-normal ml-1">%</span>
               </div>
-              <div className="mt-2 text-xs font-mono text-[var(--sk-text-muted)] flex items-center justify-between">
-                <span>Nhiệt độ: <b className="text-[var(--sk-text)]">{telemetry?.cpu?.temperatureC ?? '--'}°C</b></span>
+              <div className="sk-kpi__label">BỘ VI XỬ LÝ (CPU)</div>
+              <div className="sk-kpi__sub">
+                <span>Nhiệt độ: <b className="text-[var(--text)] font-mono">{telemetry?.cpu?.temperatureC ?? '--'}°C</b></span>
+                <span>·</span>
                 <span className="sk-tag">{host?.architecture || 'aarch64'}</span>
               </div>
-              <div className="mt-3">
-                {renderSvgPolyline(cpuHistory, 100, 'var(--sk-primary)', 'var(--sk-primary-bg)')}
+              <div className="mt-2.5">
+                {renderSvgPolyline(cpuHistory, 100, 'var(--cyan)', 'var(--cyan-bg)')}
               </div>
             </div>
 
-            {/* RAM Memory Card */}
+            {/* RAM Memory KPI Tile */}
             <div className="sk-kpi">
-              <div className="flex items-center justify-between">
-                <span className="sk-kpi-label">BỘ NHỚ RAM</span>
-                <span className="sk-tag">{telemetry?.memory?.percentage ?? 0}%</span>
+              <div className="sk-kpi__header">
+                <div className="sk-kpi__icon text-[var(--green)]">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                    <path d="M2 7h20v10H2z" />
+                    <path d="M6 11v2M10 11v2M14 11v2M18 11v2" />
+                  </svg>
+                </div>
+                <span className="sk-state sk-state--green">{telemetry?.memory?.percentage ?? 0}%</span>
               </div>
-              <div className="flex items-baseline gap-2 mt-1">
-                <span className="sk-kpi-val text-[var(--sk-success)]">
-                  {formatBytes(telemetry?.memory?.usedBytes ?? 0)}
-                </span>
-                <span className="text-xs font-mono text-[var(--sk-text-muted)]">
-                  / {formatBytes(telemetry?.memory?.totalBytes ?? 0)}
-                </span>
+              <div className="sk-kpi__value text-[var(--green)]">
+                {formatBytes(telemetry?.memory?.usedBytes ?? 0)}
               </div>
-              <div className="mt-2 text-xs font-mono text-[var(--sk-text-muted)] flex items-center justify-between">
-                <span>Trống: <b className="text-[var(--sk-text)]">{formatBytes(telemetry?.memory?.freeBytes ?? 0)}</b></span>
-                <span className="text-[var(--sk-success)]">Ổn định</span>
+              <div className="sk-kpi__label">BỘ NHỚ RAM</div>
+              <div className="sk-kpi__sub">
+                <span>Tổng: <b className="text-[var(--text)] font-mono">{formatBytes(telemetry?.memory?.totalBytes ?? 0)}</b></span>
+                <span>·</span>
+                <span>Trống: <b className="text-[var(--text)] font-mono">{formatBytes(telemetry?.memory?.freeBytes ?? 0)}</b></span>
               </div>
-              <div className="mt-3">
-                {renderSvgPolyline(memHistory, 100, 'var(--sk-success)', 'var(--sk-success-bg)')}
+              <div className="mt-2.5">
+                {renderSvgPolyline(memHistory, 100, 'var(--green)', 'var(--green-bg)')}
               </div>
             </div>
 
-            {/* NVMe Storage Card */}
+            {/* NVMe Storage KPI Tile */}
             <div className="sk-kpi">
-              <div className="flex items-center justify-between">
-                <span className="sk-kpi-label">LƯU TRỮ NVME (STORAGE)</span>
-                <span className="sk-tag">{telemetry?.disk?.percentage ?? 0}%</span>
+              <div className="sk-kpi__header">
+                <div className="sk-kpi__icon text-[var(--amber)]">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                    <rect x="2" y="4" width="20" height="16" rx="2" />
+                    <path d="M6 12h.01M10 12h.01" />
+                  </svg>
+                </div>
+                <span className="sk-state sk-state--amber">{telemetry?.disk?.percentage ?? 0}%</span>
               </div>
-              <div className="flex items-baseline gap-2 mt-1">
-                <span className="sk-kpi-val text-[var(--sk-warning)]">
-                  {formatBytes(telemetry?.disk?.usedBytes ?? 0)}
-                </span>
-                <span className="text-xs font-mono text-[var(--sk-text-muted)]">
-                  / {formatBytes(telemetry?.disk?.totalBytes ?? 0)}
-                </span>
+              <div className="sk-kpi__value text-[var(--amber)]">
+                {formatBytes(telemetry?.disk?.usedBytes ?? 0)}
               </div>
-              <div className="mt-2 text-xs font-mono text-[var(--sk-text-muted)] flex items-center justify-between">
-                <span>Còn lại: <b className="text-[var(--sk-text)]">{formatBytes(telemetry?.disk?.freeBytes ?? 0)}</b></span>
-                <span className="sk-tag">EXT4 / NVMe</span>
+              <div className="sk-kpi__label">LƯU TRỮ NVME (STORAGE)</div>
+              <div className="sk-kpi__sub">
+                <span>Tổng: <b className="text-[var(--text)] font-mono">{formatBytes(telemetry?.disk?.totalBytes ?? 0)}</b></span>
+                <span>·</span>
+                <span>Còn: <b className="text-[var(--text)] font-mono">{formatBytes(telemetry?.disk?.freeBytes ?? 0)}</b></span>
               </div>
-              <div className="mt-4 w-full bg-[var(--sk-bg-subtle)] h-2 rounded overflow-hidden">
+              <div className="mt-3.5 w-full bg-[var(--surface-3)] h-1.5 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-[var(--sk-warning)] transition-all duration-300"
+                  className="h-full bg-[var(--amber)] transition-all duration-300"
                   style={{ width: `${Math.min(100, telemetry?.disk?.percentage || 0)}%` }}
                 />
               </div>
             </div>
 
-            {/* Network Traffic Card */}
+            {/* Network Traffic KPI Tile */}
             <div className="sk-kpi">
-              <div className="flex items-center justify-between">
-                <span className="sk-kpi-label">LƯU LƯỢNG MẠNG (LIVE)</span>
-                <span className="sk-pill running">ONLINE</span>
-              </div>
-              <div className="flex items-baseline justify-between mt-1">
-                <div>
-                  <div className="text-[10px] uppercase font-mono text-[var(--sk-text-dim)]">↓ Download</div>
-                  <span className="text-sm font-semibold font-mono text-[var(--sk-primary)]">
-                    {telemetry?.network?.rxKbps ?? 0} <span className="text-[10px] text-[var(--sk-text-muted)]">Kbps</span>
-                  </span>
+              <div className="sk-kpi__header">
+                <div className="sk-kpi__icon text-[var(--accent-bright)]">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                    <path d="M4 14l4-4 4 4 8-8" />
+                    <path d="M14 6h6v6" />
+                  </svg>
                 </div>
-                <div>
-                  <div className="text-[10px] uppercase font-mono text-[var(--sk-text-dim)]">↑ Upload</div>
-                  <span className="text-sm font-semibold font-mono text-[var(--sk-success)]">
-                    {telemetry?.network?.txKbps ?? 0} <span className="text-[10px] text-[var(--sk-text-muted)]">Kbps</span>
-                  </span>
-                </div>
+                <span className="sk-pill sk-pill--green">ONLINE</span>
               </div>
-              <div className="mt-3">
-                {renderSvgPolyline(netRxHistory, 2, 'var(--sk-primary)', 'var(--sk-primary-bg)')}
+              <div className="sk-kpi__value text-[var(--accent-bright)]">
+                {telemetry?.network?.rxKbps ?? 0} <span className="text-xs text-[var(--text-dim)] font-normal">/ {telemetry?.network?.txKbps ?? 0}</span>
+              </div>
+              <div className="sk-kpi__label">LƯU LƯỢNG MẠNG (KBPS)</div>
+              <div className="sk-kpi__sub">
+                <span>↓ {telemetry?.network?.rxKbps ?? 0} Kbps</span>
+                <span>·</span>
+                <span>↑ {telemetry?.network?.txKbps ?? 0} Kbps</span>
+              </div>
+              <div className="mt-2.5">
+                {renderSvgPolyline(netRxHistory, 2, 'var(--accent-bright)', 'var(--accent-bg)')}
               </div>
             </div>
           </div>
 
-          {/* Quick Actions & Host Specs Grid */}
+          {/* 3. Flush 2-Pane Console Layout theo chuẩn Section 4.3 */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* Host & Supervisor Info */}
-            <div className="lg:col-span-2 sk-card p-4 space-y-3">
-              <div className="flex items-center justify-between border-b border-[var(--sk-border)] pb-2.5">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--sk-text-muted)] font-mono flex items-center gap-2">
-                  <span>⚙ Thông tin Host & HassOS Supervisor</span>
-                </h3>
-                <span className="text-[10px] font-mono text-[var(--sk-text-dim)]">
+            {/* Host, Supervisor & Entities Telemetry */}
+            <div className="lg:col-span-2 sk-card p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-[var(--border-soft)] pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="sk-state sk-state--accent">SYSTEM ARCHITECTURE</span>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)] font-mono">
+                    Host & HassOS Supervisor Specs
+                  </h3>
+                </div>
+                <span className="text-[10.5px] font-mono text-[var(--text-faint)]">
                   Cập nhật: {lastUpdate ? lastUpdate.toLocaleTimeString('vi-VN') : '--'}
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs font-mono">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs font-mono">
                 <div>
-                  <div className="text-[10px] text-[var(--sk-text-dim)] uppercase">Hệ điều hành Host</div>
-                  <div className="text-[var(--sk-text)] font-medium mt-0.5">{host?.operatingSystem || '--'}</div>
+                  <div className="text-[10px] text-[var(--text-faint)] uppercase">Hệ điều hành Host</div>
+                  <div className="text-[var(--text)] font-semibold mt-1">{host?.operatingSystem || '--'}</div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-[var(--sk-text-dim)] uppercase">Phiên bản Core</div>
-                  <div className="text-[var(--sk-primary)] font-medium mt-0.5">{host?.coreVersion || '--'}</div>
+                  <div className="text-[10px] text-[var(--text-faint)] uppercase">Phiên bản Core</div>
+                  <div className="text-[var(--accent-bright)] font-semibold mt-1">{host?.coreVersion || '--'}</div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-[var(--sk-text-dim)] uppercase">Supervisor Engine</div>
-                  <div className="text-[var(--sk-success)] font-medium mt-0.5">{host?.supervisorVersion || '--'}</div>
+                  <div className="text-[10px] text-[var(--text-faint)] uppercase">Supervisor Engine</div>
+                  <div className="text-[var(--green)] font-semibold mt-1">{host?.supervisorVersion || '--'}</div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-[var(--sk-text-dim)] uppercase">Phần cứng / Board</div>
-                  <div className="text-[var(--sk-text)] font-medium mt-0.5">{host?.board || 'Generic x86_64'}</div>
+                  <div className="text-[10px] text-[var(--text-faint)] uppercase">Phần cứng / Board</div>
+                  <div className="text-[var(--text)] font-medium mt-1">{host?.board || 'Generic x86_64'}</div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-[var(--sk-text-dim)] uppercase">IP & Cổng kết nối</div>
-                  <div className="text-[var(--sk-text)] font-medium mt-0.5">
+                  <div className="text-[10px] text-[var(--text-faint)] uppercase">IP & Cổng kết nối</div>
+                  <div className="text-[var(--text)] font-semibold mt-1">
                     {host?.ipAddress}:{host?.port || 8123}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-[var(--sk-text-dim)] uppercase">Thời gian hoạt động</div>
-                  <div className="text-[var(--sk-text)] font-medium mt-0.5">
+                  <div className="text-[10px] text-[var(--text-faint)] uppercase">Thời gian hoạt động</div>
+                  <div className="text-[var(--text)] font-medium mt-1">
                     {formatDuration(host?.uptimeSeconds || 0)}
                   </div>
                 </div>
               </div>
 
               {/* Entities Summary Badges */}
-              <div className="pt-2 border-t border-[var(--sk-border)] flex flex-wrap items-center gap-2">
-                <span className="text-[11px] font-mono text-[var(--sk-text-dim)]">Thực thể IoT:</span>
-                <span className="sk-tag bg-[var(--sk-primary-bg)] text-[var(--sk-primary)] border-[var(--sk-primary-border)]">
+              <div className="pt-3 border-t border-[var(--border-soft)] flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-mono text-[var(--text-faint)] uppercase">Thực thể IoT:</span>
+                <span className="sk-pill sk-pill--accent">
                   Tổng {entitiesStats?.total || 0}
                 </span>
-                <span className="sk-tag bg-[var(--sk-success-bg)] text-[var(--sk-success)] border-[var(--sk-success-border)]">
+                <span className="sk-pill sk-pill--green">
                   Active {entitiesStats?.active || 0}
                 </span>
                 {entitiesStats?.unavailable > 0 && (
-                  <span className="sk-tag bg-[var(--sk-danger-bg)] text-[var(--sk-danger)] border-[var(--sk-danger-border)]">
+                  <span className="sk-pill sk-pill--red">
                     Unavailable {entitiesStats?.unavailable}
                   </span>
                 )}
@@ -466,46 +531,50 @@ export default function HassPerformancePage() {
                 <span className="sk-tag">Công tắc ({entitiesStats?.domains?.switch || 0})</span>
                 <span className="sk-tag">Đèn ({entitiesStats?.domains?.light || 0})</span>
                 <span className="sk-tag">Tự động ({entitiesStats?.domains?.automation || 0})</span>
+                <span className="sk-tag">Khí hậu ({entitiesStats?.domains?.climate || 0})</span>
               </div>
             </div>
 
-            {/* Supervisor Quick Actions Card */}
-            <div className="sk-card p-4 space-y-3 flex flex-col justify-between">
+            {/* Supervisor Quick Actions Pane */}
+            <div className="sk-card p-5 flex flex-col justify-between space-y-4">
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--sk-text-muted)] font-mono border-b border-[var(--sk-border)] pb-2.5">
-                  ⚡ Thao tác Quản trị Supervisor
-                </h3>
-                <p className="text-[11px] text-[var(--sk-text-dim)] mt-2 font-mono">
-                  Gửi lệnh trực tiếp đến Home Assistant Core & Host Operating System
+                <div className="flex items-center gap-2 border-b border-[var(--border-soft)] pb-3">
+                  <span className="sk-state sk-state--amber">CONSOLE ACTIONS</span>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)] font-mono">
+                    Điều Khiển Nhanh
+                  </h3>
+                </div>
+                <p className="text-[11.5px] text-[var(--text-faint)] mt-2.5 font-mono leading-relaxed">
+                  Gửi lệnh trực tiếp đến Home Assistant Core, Supervisor Engine và Máy chủ Host
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <button
-                  onClick={() => promptCoreAction('restart_core', 'Khởi động lại Home Assistant Core', 'Bạn có chắc chắn muốn khởi động lại dịch vụ Home Assistant Core? Các tự động hóa sẽ tạm gián đoạn trong 15-30 giây.')}
+                  onClick={() => promptCoreAction('restart_core', 'Khởi động lại Home Assistant Core', 'Bạn có chắc chắn muốn khởi động lại dịch vụ Home Assistant Core? Các tự động hóa sẽ tạm dừng trong 15-30 giây.')}
                   disabled={coreActionBusy}
-                  className="btn-ghost text-xs justify-center py-2"
+                  className="btn btn-secondary btn-sm justify-center"
                 >
                   🔄 Restart Core
                 </button>
                 <button
                   onClick={() => promptCoreAction('restart_supervisor', 'Khởi động lại HassOS Supervisor', 'Thao tác này sẽ khởi động lại tiến trình quản lý Supervisor Add-on containers.')}
                   disabled={coreActionBusy}
-                  className="btn-ghost text-xs justify-center py-2"
+                  className="btn btn-secondary btn-sm justify-center"
                 >
                   ⚡ Restart Supervisor
                 </button>
                 <button
                   onClick={() => promptCoreAction('reload_automations', 'Nạp lại Automations & Scripts', 'Nạp lại cấu hình YAML mà không cần khởi động lại toàn bộ Core.')}
                   disabled={coreActionBusy}
-                  className="btn-ghost text-xs justify-center py-2 text-[var(--sk-primary)]"
+                  className="btn btn-secondary btn-sm justify-center text-[var(--accent-bright)]"
                 >
                   📑 Reload Automations
                 </button>
                 <button
-                  onClick={() => promptCoreAction('reboot_host', 'Khởi động lại toàn bộ HassOS Host', 'CẢNH BÁO: Toàn bộ hệ điều hành HassOS sẽ khởi động lại. Tất cả Add-on và thiết bị IoT sẽ ngắt kết nối tạm thời.', true)}
+                  onClick={() => promptCoreAction('reboot_host', 'Khởi động lại toàn bộ HassOS Host', 'CẢNH BÁO NGUY HIỂM: Toàn bộ máy chủ HassOS sẽ tắt và khởi động lại. Tất cả Add-on và kết nối mạng sẽ gián đoạn.', true)}
                   disabled={coreActionBusy}
-                  className="btn-danger text-xs justify-center py-2"
+                  className="btn btn-danger btn-sm justify-center"
                 >
                   ⚠ Reboot Host
                 </button>
@@ -513,31 +582,32 @@ export default function HassPerformancePage() {
             </div>
           </div>
 
-          {/* Add-ons Management Section */}
-          <div className="sk-card p-4 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--sk-border)] pb-3">
+          {/* 4. Add-ons Management Section theo chuẩn List Anatomy (Section 4.2 & 5.6) */}
+          <div className="sk-dtable-wrapper">
+            {/* ListToolbar (.sk-listhead) */}
+            <div className="p-4 border-b border-[var(--border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[var(--surface)]">
               <div className="flex items-center gap-3">
-                <h3 className="text-sm font-semibold text-[var(--sk-text)] font-mono">
-                  Danh sách Add-on Containers ({data?.addons?.total || 0})
+                <h3 className="text-sm font-semibold text-[var(--text)] font-mono">
+                  Danh Sách Add-on Containers
                 </h3>
                 <div className="sk-seg">
                   <button
                     onClick={() => setAddonTab('all')}
-                    className={addonTab === 'all' ? 'active' : ''}
+                    className={`sk-seg__btn ${addonTab === 'all' ? 'is-on' : ''}`}
                   >
-                    Tất cả ({data?.addons?.total || 0})
+                    Tất cả <span className="sk-seg__count">{data?.addons?.total || 0}</span>
                   </button>
                   <button
                     onClick={() => setAddonTab('running')}
-                    className={addonTab === 'running' ? 'active' : ''}
+                    className={`sk-seg__btn ${addonTab === 'running' ? 'is-on' : ''}`}
                   >
-                    Đang chạy ({data?.addons?.running || 0})
+                    Đang chạy <span className="sk-seg__count">{data?.addons?.running || 0}</span>
                   </button>
                   <button
                     onClick={() => setAddonTab('stopped')}
-                    className={addonTab === 'stopped' ? 'active' : ''}
+                    className={`sk-seg__btn ${addonTab === 'stopped' ? 'is-on' : ''}`}
                   >
-                    Đã dừng ({data?.addons?.stopped || 0})
+                    Đã dừng <span className="sk-seg__count">{data?.addons?.stopped || 0}</span>
                   </button>
                 </div>
               </div>
@@ -548,16 +618,24 @@ export default function HassPerformancePage() {
                   placeholder="Tìm Add-on theo tên / slug..."
                   value={addonSearch}
                   onChange={(e) => setAddonSearch(e.target.value)}
-                  className="w-full text-xs font-mono"
+                  className="form-input text-xs font-mono"
                 />
               </div>
             </div>
 
-            {/* Density-First Add-on Table */}
+            {/* Density-First Data Table (.sk-dtable) */}
             <div className="overflow-x-auto">
-              <table className="sk-dtable w-full">
+              <table className="sk-dtable">
                 <thead>
                   <tr>
+                    <th className="w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={allFilteredSelected}
+                        onChange={toggleSelectAll}
+                        title="Chọn tất cả"
+                      />
+                    </th>
                     <th>ADD-ON / DỊCH VỤ</th>
                     <th>TRẠNG THÁI</th>
                     <th className="text-right">PHIÊN BẢN</th>
@@ -570,7 +648,7 @@ export default function HassPerformancePage() {
                 <tbody>
                   {filteredAddons.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="text-center py-8 text-xs text-[var(--sk-text-muted)] font-mono">
+                      <td colSpan="8" className="text-center py-10 text-xs text-[var(--text-faint)] font-mono">
                         Không tìm thấy Add-on nào phù hợp với bộ lọc.
                       </td>
                     </tr>
@@ -578,20 +656,38 @@ export default function HassPerformancePage() {
                     filteredAddons.map((ad) => {
                       const isRunning = ad.state === 'started';
                       const isBusy = actionBusySlug === ad.slug;
+                      const isSelected = selectedSlugs.includes(ad.slug);
 
                       return (
-                        <tr key={ad.slug}>
+                        <tr
+                          key={ad.slug}
+                          className={`${isSelected ? 'is-selected' : ''}`}
+                        >
+                          {/* Checkbox */}
+                          <td className="text-center">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelectOne(ad.slug)}
+                            />
+                          </td>
+
                           {/* Name & Category */}
                           <td>
                             <div>
-                              <div className="font-medium text-[var(--sk-text)] flex items-center gap-2">
-                                <span>{ad.name}</span>
+                              <div className="font-semibold text-[var(--text)] flex items-center gap-2">
+                                <span
+                                  onClick={() => setActiveDrawerAddon(ad)}
+                                  className="hover:text-[var(--accent-bright)] cursor-pointer transition-colors"
+                                >
+                                  {ad.name}
+                                </span>
                                 {ad.category && <span className="sk-tag text-[9px]">{ad.category}</span>}
                               </div>
-                              <div className="text-[10px] text-[var(--sk-text-dim)] font-mono mt-0.5">
+                              <div className="text-[10px] text-[var(--text-faint)] font-mono mt-0.5">
                                 slug: {ad.slug}
                               </div>
-                              <div className="text-[11px] text-[var(--sk-text-muted)] line-clamp-1 mt-0.5">
+                              <div className="text-[11px] text-[var(--text-dim)] line-clamp-1 mt-0.5">
                                 {ad.description}
                               </div>
                             </div>
@@ -599,8 +695,8 @@ export default function HassPerformancePage() {
 
                           {/* State Pill */}
                           <td>
-                            <span className={`sk-pill ${isRunning ? 'running' : 'stopped'}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${isRunning ? 'bg-[var(--sk-success)]' : 'bg-[var(--sk-text-dim)]'}`} />
+                            <span className={`sk-pill ${isRunning ? 'sk-pill--green' : 'sk-pill--red'}`}>
+                              <span className="sk-pill__dot" />
                               {isRunning ? 'RUNNING' : 'STOPPED'}
                             </span>
                           </td>
@@ -613,20 +709,20 @@ export default function HassPerformancePage() {
                           {/* CPU */}
                           <td className="text-right font-mono text-xs">
                             {isRunning ? (
-                              <span className={ad.cpuUsage > 5 ? 'text-[var(--sk-warning)] font-semibold' : 'text-[var(--sk-text)]'}>
+                              <span className={ad.cpuUsage > 4 ? 'text-[var(--amber)] font-bold' : 'text-[var(--text)]'}>
                                 {ad.cpuUsage}%
                               </span>
                             ) : (
-                              <span className="text-[var(--sk-text-dim)]">—</span>
+                              <span className="text-[var(--text-ghost)]">—</span>
                             )}
                           </td>
 
                           {/* RAM Memory */}
                           <td className="text-right font-mono text-xs">
                             {isRunning ? (
-                              <span>{formatBytes(ad.memoryBytes)}</span>
+                              <span className="font-semibold">{formatBytes(ad.memoryBytes)}</span>
                             ) : (
-                              <span className="text-[var(--sk-text-dim)]">—</span>
+                              <span className="text-[var(--text-ghost)]">—</span>
                             )}
                           </td>
 
@@ -635,12 +731,12 @@ export default function HassPerformancePage() {
                             <div className="flex flex-wrap gap-1">
                               {Object.keys(ad.ports || {}).length > 0 ? (
                                 Object.entries(ad.ports).map(([proto, port]) => (
-                                  <span key={proto} className="sk-tag text-[10px]">
+                                  <span key={proto} className="sk-tag text-[9.5px]">
                                     {port}
                                   </span>
                                 ))
                               ) : (
-                                <span className="text-[10px] text-[var(--sk-text-dim)] font-mono">Host network</span>
+                                <span className="text-[10px] text-[var(--text-faint)] font-mono">Host network</span>
                               )}
                             </div>
                           </td>
@@ -649,21 +745,21 @@ export default function HassPerformancePage() {
                           <td className="text-right">
                             <div className="flex items-center justify-end gap-1.5">
                               {isBusy ? (
-                                <span className="text-xs font-mono text-[var(--sk-text-dim)] animate-pulse">
+                                <span className="text-xs font-mono text-[var(--text-dim)] animate-pulse">
                                   Đang xử lý...
                                 </span>
                               ) : isRunning ? (
                                 <>
                                   <button
                                     onClick={() => handleAddonAction(ad.slug, 'restart', ad.name)}
-                                    className="btn-ghost text-[11px] py-1 px-2"
+                                    className="btn btn-ghost btn-sm"
                                     title="Khởi động lại Add-on"
                                   >
                                     ↺ Restart
                                   </button>
                                   <button
                                     onClick={() => handleAddonAction(ad.slug, 'stop', ad.name)}
-                                    className="btn-danger text-[11px] py-1 px-2"
+                                    className="btn btn-danger btn-sm"
                                     title="Dừng Add-on"
                                   >
                                     ■ Dừng
@@ -672,12 +768,19 @@ export default function HassPerformancePage() {
                               ) : (
                                 <button
                                   onClick={() => handleAddonAction(ad.slug, 'start', ad.name)}
-                                  className="btn-primary text-[11px] py-1 px-2"
+                                  className="btn btn-primary btn-sm"
                                   title="Khởi động Add-on"
                                 >
                                   ▶ Chạy
                                 </button>
                               )}
+                              <button
+                                onClick={() => setActiveDrawerAddon(ad)}
+                                className="btn btn-ghost btn-sm text-[var(--accent-bright)]"
+                                title="Xem chi tiết Add-on"
+                              >
+                                Chi tiết →
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -691,6 +794,195 @@ export default function HassPerformancePage() {
         </>
       )}
 
+      {/* 5. Floating BulkBar (.sk-bulkbar) theo chuẩn Section 5.7 */}
+      {selectedSlugs.length > 0 && (
+        <div className="sk-bulkbar">
+          <span className="font-mono text-xs font-semibold text-[var(--text)]">
+            Đã chọn <b className="text-[var(--accent-bright)]">{selectedSlugs.length}</b> add-on
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleBulkAction('start')}
+              disabled={bulkBusy}
+              className="btn btn-primary btn-sm"
+            >
+              ▶ Khởi động
+            </button>
+            <button
+              onClick={() => handleBulkAction('stop')}
+              disabled={bulkBusy}
+              className="btn btn-danger btn-sm"
+            >
+              ■ Dừng
+            </button>
+            <button
+              onClick={() => handleBulkAction('restart')}
+              disabled={bulkBusy}
+              className="btn btn-secondary btn-sm"
+            >
+              ↺ Restart
+            </button>
+            <button
+              onClick={() => setSelectedSlugs([])}
+              className="btn btn-ghost btn-sm"
+            >
+              Bỏ chọn
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 6. Slide-Over Drawer (.sk-drawer) theo chuẩn Section 5.9 */}
+      {activeDrawerAddon && (
+        <div
+          className="sk-drawer-backdrop"
+          onClick={() => setActiveDrawerAddon(null)}
+        >
+          <div
+            className="sk-drawer"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Drawer Head */}
+            <div className="sk-drawer__head">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-[var(--text)] font-sans">
+                    {activeDrawerAddon.name}
+                  </h3>
+                  <span className={`sk-pill ${activeDrawerAddon.state === 'started' ? 'sk-pill--green' : 'sk-pill--red'}`}>
+                    <span className="sk-pill__dot" />
+                    {activeDrawerAddon.state === 'started' ? 'RUNNING' : 'STOPPED'}
+                  </span>
+                </div>
+                <div className="text-xs text-[var(--text-faint)] font-mono mt-0.5">
+                  slug: {activeDrawerAddon.slug} · version: {activeDrawerAddon.version}
+                </div>
+              </div>
+
+              <button
+                onClick={() => setActiveDrawerAddon(null)}
+                className="btn btn-ghost btn-sm btn-icon"
+                title="Đóng ngăn kéo"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Drawer Body */}
+            <div className="sk-drawer__body space-y-5 font-mono text-xs">
+              {/* Mô tả */}
+              <div>
+                <div className="text-[10px] uppercase text-[var(--text-faint)] font-semibold mb-1">
+                  MÔ TẢ DỊCH VỤ
+                </div>
+                <p className="text-[var(--text)] font-sans leading-relaxed text-sm bg-[var(--surface-2)] p-3 rounded border border-[var(--border-soft)]">
+                  {activeDrawerAddon.description}
+                </p>
+              </div>
+
+              {/* Thông số Container */}
+              <div>
+                <div className="text-[10px] uppercase text-[var(--text-faint)] font-semibold mb-2">
+                  THÔNG SỐ CONTAINER HIỆN HÀNH
+                </div>
+                <div className="grid grid-cols-2 gap-3 bg-[var(--surface-2)] p-3 rounded border border-[var(--border-soft)]">
+                  <div>
+                    <div className="text-[10px] text-[var(--text-faint)]">MỨC TIÊU THỤ CPU</div>
+                    <div className="text-sm font-bold text-[var(--cyan)] mt-0.5">
+                      {activeDrawerAddon.state === 'started' ? `${activeDrawerAddon.cpuUsage}%` : '0%'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-[var(--text-faint)]">BỘ NHỚ RAM ĐANG DÙNG</div>
+                    <div className="text-sm font-bold text-[var(--green)] mt-0.5">
+                      {activeDrawerAddon.state === 'started' ? formatBytes(activeDrawerAddon.memoryBytes) : '0 MB'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-[var(--text-faint)]">CHẾ ĐỘ KHỞI ĐỘNG</div>
+                    <div className="text-xs font-semibold text-[var(--text)] mt-0.5 uppercase">
+                      {activeDrawerAddon.boot}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-[var(--text-faint)]">TỰ ĐỘNG CẬP NHẬT</div>
+                    <div className="text-xs font-semibold text-[var(--text)] mt-0.5">
+                      {activeDrawerAddon.auto_update ? 'Bật (Auto)' : 'Tắt (Manual)'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cổng mạng */}
+              <div>
+                <div className="text-[10px] uppercase text-[var(--text-faint)] font-semibold mb-1.5">
+                  CỔNG KẾT NỐI (NETWORK PORTS)
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {Object.keys(activeDrawerAddon.ports || {}).length > 0 ? (
+                    Object.entries(activeDrawerAddon.ports).map(([proto, port]) => (
+                      <span key={proto} className="sk-tag bg-[var(--surface-3)] text-[var(--text)] border-[var(--border)]">
+                        {proto} ➔ {port}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-[var(--text-faint)] text-xs">Container dùng mạng Host trực tiếp.</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Logs Simulator */}
+              <div>
+                <div className="text-[10px] uppercase text-[var(--text-faint)] font-semibold mb-1.5">
+                  NHẬT KÝ CONTAINER (RECENT LOGS)
+                </div>
+                <div className="bg-[var(--bg-code)] text-[var(--text-code)] p-3 rounded font-mono text-[11px] leading-relaxed border border-[var(--border)] h-40 overflow-y-auto">
+                  <div>[s6-init] making user provided files available at /var/run/s6/etc...done.</div>
+                  <div>[s6-init] ensuring user provided files have correct perms...done.</div>
+                  <div>[info] Starting {activeDrawerAddon.name} version {activeDrawerAddon.version}...</div>
+                  <div>[info] Configuration loaded successfully.</div>
+                  <div>[info] Service listening on mapped ports.</div>
+                  <div>[info] Heartbeat OK · Telemetry running at 1500ms interval.</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Drawer Foot */}
+            <div className="sk-drawer__foot">
+              <button
+                onClick={() => setActiveDrawerAddon(null)}
+                className="btn btn-ghost btn-sm"
+              >
+                Đóng
+              </button>
+              {activeDrawerAddon.state === 'started' ? (
+                <>
+                  <button
+                    onClick={() => handleAddonAction(activeDrawerAddon.slug, 'restart', activeDrawerAddon.name)}
+                    className="btn btn-secondary btn-sm"
+                  >
+                    ↺ Khởi động lại
+                  </button>
+                  <button
+                    onClick={() => handleAddonAction(activeDrawerAddon.slug, 'stop', activeDrawerAddon.name)}
+                    className="btn btn-danger btn-sm"
+                  >
+                    ■ Dừng Add-on
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => handleAddonAction(activeDrawerAddon.slug, 'start', activeDrawerAddon.name)}
+                  className="btn btn-primary btn-sm"
+                >
+                  ▶ Khởi động Add-on
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Confirmation Modal */}
       <Modal
         isOpen={confirmModal.isOpen}
@@ -698,19 +990,19 @@ export default function HassPerformancePage() {
         title={confirmModal.title}
       >
         <div className="space-y-4">
-          <p className="text-xs text-[var(--sk-text)] leading-relaxed font-mono">
+          <p className="text-xs text-[var(--text)] leading-relaxed font-mono">
             {confirmModal.message}
           </p>
-          <div className="flex justify-end gap-2 pt-2 border-t border-[var(--sk-border)]">
+          <div className="flex justify-end gap-2 pt-3 border-t border-[var(--border)]">
             <button
               onClick={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
-              className="btn-ghost text-xs"
+              className="btn btn-ghost btn-sm"
             >
               Hủy bỏ
             </button>
             <button
               onClick={executeConfirmedCoreAction}
-              className={confirmModal.isDanger ? 'btn-danger text-xs' : 'btn-primary text-xs'}
+              className={confirmModal.isDanger ? 'btn btn-danger btn-sm' : 'btn btn-primary btn-sm'}
             >
               Xác nhận thực hiện
             </button>
@@ -720,4 +1012,3 @@ export default function HassPerformancePage() {
     </div>
   );
 }
-

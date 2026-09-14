@@ -743,3 +743,65 @@ input[type="checkbox"] {
 .glass-table tbody tr:hover {
   background: var(--surface-hover);
 }
+
+/* ============================================================
+   5.9 Slide-Over Drawer (.sk-drawer)
+   ============================================================ */
+.sk-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 1140;
+  display: flex;
+  justify-content: flex-end;
+  animation: sk-fade-in 0.2s ease;
+}
+
+.sk-drawer {
+  width: 100%;
+  max-width: 520px;
+  height: 100vh;
+  background: var(--surface);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  z-index: 1150;
+  animation: sk-slide-left 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sk-drawer__head {
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sk-drawer__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.sk-drawer__foot {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+@keyframes sk-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes sk-slide-left {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
