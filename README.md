@@ -4,7 +4,7 @@ Trang **Dashboard quản trị user** cho **WiFi Hotspot của MikroTik** (Route
 
 - **Frontend**: React 19 + Vite 8 + Tailwind CSS 4 + React Router 7
 - **Backend**: Node.js (Express 5) làm **proxy** chuyển tiếp tới MikroTik REST API
-- **UI**: **Neon Glass Light** — Frosted Glassmorphism + High-Contrast Precision (font Space Grotesk, kính mờ blur(20px), **primary Neon Blue #0084FF** + neon magenta/violet/amber), xem `DESIGN.md`
+- **UI**: **ServerKit Design System** — Chuẩn kiến trúc **Infra Console Architecture** (Dark-First `#0a0b0e`, hỗ trợ Light `#f6f7fb` & System theme, phông chữ **IBM Plex Sans** & **IBM Plex Mono**, technical background grid, hệ thống Primitives `.sk-*`), xem `DESIGN_SYSTEM_RULES.md`
 
 > ⚠️ Vì sao cần backend proxy?
 > MikroTik REST API **không gửi header CORS** nên trình duyệt không thể gọi trực tiếp. Backend làm trung gian để:
@@ -98,22 +98,26 @@ wifi_hostpost_web/
 │   ├── package.json
 │   ├── .env                     # Cấu hình router (KHÔNG commit)
 │   └── .env.example             # Mẫu cấu hình
-├── frontend/                    # React + Vite + Tailwind
+├── frontend/                    # React 19 + Vite 8
+│   ├── public/
+│   │   └── fonts/               # Chứa 66 file phông .woff2 tự lưu trữ (IBM Plex Sans & Mono)
 │   └── src/
-│       ├── main.jsx / App.jsx   # Entry + Router (Protected routes)
-│       ├── index.css            # Tailwind + Neon Glass Light tokens
+│       ├── main.jsx / App.jsx   # Entry + Router (Protected routes) + ThemeProvider
+│       ├── context/ThemeContext.jsx # Quản lý Dark / Light / System Theme runtime
+│       ├── fonts.css            # Khai báo @font-face local trỏ vào /fonts/*.woff2
+│       ├── index.css            # ServerKit Tokens, Primitives, CSS Custom Properties
 │       ├── api/client.js        # Gọi backend /api (MikroTik + Proxmox)
 │       ├── pages/
-│       │   ├── SystemPerformancePage.jsx  # Giám sát hiệu năng phần cứng RouterOS (CPU, RAM, HDD, Uptime, Traffic)
+│       │   ├── SystemPerformancePage.jsx  # Giám sát hiệu năng RouterOS (CPU, RAM, Traffic, Interfaces)
 │       │   ├── ProxmoxPerformancePage.jsx # Giám sát & Quản trị Proxmox VE (Node, KVM, LXC, ZFS, Bridges)
-│       │   ├── DashboardPage.jsx          # Tổng quan Hotspot: thẻ số liệu + biểu đồ profile + phiên gần đây + SSE
-│       │   ├── UsersPage.jsx              # CRUD người dùng hotspot (gia hạn, reset, xuất CSV, in thẻ, quản lý profile)
-│       │   ├── ProfilesPage.jsx           # CRUD hồ sơ hotspot (rate-limit, shared-users, mac-cookie)
-│       │   ├── SessionsPage.jsx           # Phiên active + nút Ngắt (kick)
-│       │   ├── SettingsPage.jsx           # Cài đặt kết nối Router, mẫu in thẻ, sao lưu router, bảo mật
-│       │   └── LoginPage.jsx              # Đăng nhập quản trị viên
-│       ├── components/          # Layout, ConnectionStatus, Modal, Spinner, StatCard, CustomSelect
-│       ├── hooks/               # useApi, useAuth, useEventSource
+│       │   ├── DashboardPage.jsx          # Tổng quan Hotspot: KPI, phân bố profile, phiên gần đây
+│       │   ├── UsersPage.jsx              # Quản trị người dùng hotspot & hồ sơ (BulkBar, in thẻ, CSV)
+│       │   ├── ProfilesPage.jsx           # Quản trị hồ sơ gói cước hotspot
+│       │   ├── SessionsPage.jsx           # Phiên active + nút Ngắt kết nối
+│       │   ├── SettingsPage.jsx           # Cài đặt hệ thống, tài khoản /user, mẫu in voucher, backup .rsc
+│       │   └── LoginPage.jsx              # Đăng nhập quản trị viên Infra Console
+│       ├── components/          # Layout (250px sidebar), ConnectionStatus, Modal, Spinner, StatCard, CustomSelect
+│       ├── hooks/               # useApi, useAuth, useEventSource, useToast
 │       └── utils/format.js      # Định dạng thời lượng / dung lượng
 ├── scripts/
 │   ├── start-servers.ps1        # Chạy mock+backend+vite nền trên Windows
@@ -630,37 +634,34 @@ curl -u admin:matkhau http://192.168.88.1/rest/ip/hotspot/user
      - Dropdown Chọn Tài khoản Router điền mẫu in thẻ: Hiển thị icon `👤`, tên tài khoản, mật khẩu kèm badge gói cước.
      - Dropdown Phân nhóm quyền Hệ thống (`admin-user-group`): Hiển thị icon `👑`/`✍️`/`👁️`, quyền chi tiết và badge phân quyền rõ ràng.
 
-### Phiên 29 (2026-09-09) — Thiết lập Nguyên tắc Cốt lõi: Phân tích Ảnh hưởng & Bảo toàn Tuyệt đối Logic Hiện có
-1. **Thiết lập Quy tắc Phòng chống Hồi quy (Zero-Regression Policy)**:
-   - Trước khi sửa đổi bất kỳ logic frontend hoặc backend nào, bắt buộc rà soát toàn bộ các luồng phụ thuộc, tham số truyền vào/trả về, state và sự kiện liên quan để không gây ảnh hưởng (side-effects) đến các tính năng đã chạy thành công trước đó.
-2. **Kiểm tra Toàn vẹn Liên tục**:
-   - Mọi thay đổi đều được kiểm tra biên dịch (`npm run build`), kiểm tra API và kiểm tra giao diện để đảm bảo tính ổn định và liên tục 100%.
-
-### Phiên 30 (2026-09-09) — Tích hợp Dashboard Giám sát Hiệu năng Hypervisor Proxmox VE (Real-time Mock Engine)
-1. **Mock Proxmox VE 8.x Engine (`backend/mock-proxmox.js`)**:
-   - Xây dựng module giả lập hoàn chỉnh cụm máy chủ ảo hóa Proxmox VE với cấu hình phần cứng chân thực: Intel Xeon E-2288G (8C/16T), 64GB DDR4 ECC RAM, ZFS NVMe Pool (2TB), Linux Bridges (`vmbr0`, `vmbr1` 10GbE SFP+).
-   - Giả lập danh sách máy ảo KVM & container LXC thực tế:
-     - **VM 100: MikroTik-CHR-Hotspot** (RouterOS 7.16 Cloud Hosted Router phát WiFi Hotspot & định tuyến VLAN).
-     - **VM 101: Ubuntu-Docker-Services** (Portainer, Nginx Proxy Manager, Grafana).
-     - **VM 102: WinServer-2022-AD** (Active Directory Domain Controller & File Server).
-     - **VM 103: pfSense-Firewall-Backup** (Tường lửa dự phòng).
-     - **LXC 200: NodeJS-Backend-Proxy** (Alpine Linux chạy Express proxy).
-     - **LXC 201: Pihole-AdGuard-DNS** (Debian chặn quảng cáo và phân giải DNS nội bộ).
-     - **LXC 202: PostgreSQL-16-Cluster** (Cơ sở dữ liệu lưu trữ nhật ký truy cập Hotspot & Billing).
-   - Mô phỏng biến thiên CPU/RAM/Băng thông mạng mượt mà, hỗ trợ API điều khiển bật (`start`), tắt (`stop`), khởi động lại (`reboot`) máy ảo và container theo thời gian thực.
-2. **Backend API Endpoints (`backend/server.js`)**:
-   - `GET /api/proxmox/summary`: Lấy toàn bộ cấu hình node, storage pools, bridges và danh sách guest.
-   - `GET /api/proxmox/events`: Server-Sent Events (SSE) phát sóng liên tục số liệu hiệu năng theo chu kỳ cấu hình (1s, 1.5s, 3s).
-   - `POST /api/proxmox/guests/:type/:vmid/action`: Thực hiện hành động `start` / `stop` / `reboot` trên máy ảo/container.
-3. **Frontend Dashboard Proxmox VE (`ProxmoxPerformancePage.jsx`)**:
-   - Thiết kế chuẩn **Neon Glass Light**:
-     - **6 KPI Metric Cards**: CPU Node, RAM Usage (kèm KSM), ZFS Pool Usage, Load Average (1m/5m/15m + IO Wait + SWAP), Băng thông Mạng tổng hợp (Download/Upload), Thống kê số lượng máy ảo & container đang chạy/tắt.
-     - **2 Biểu đồ Spline Vector SVG Real-time**: Đồ thị Tải CPU & RAM (30 điểm lịch sử) và Đồ thị Băng thông Mạng qua Bridges `vmbr0`/`vmbr1`.
-     - **Bảng Quản trị Máy ảo & Container**: Phân loại KVM/LXC, tìm kiếm nhanh, hiển thị % vCPU, RAM thực/cấp phát, lưu lượng mạng Rx/Tx, Uptime và các nút tương tác nhanh (Reboot, Stop, Start).
-     - **Khối Phân vùng Ổ cứng (Storage Pools)**: Trực quan hóa dung lượng ZFS pool, local rootfs và Proxmox Backup Server (PBS).
-     - **Khối Cổng Mạng & Linux Bridges**: Hiển thị trạng thái cổng mạng vật lý và virtual bridges kèm cấu hình VLAN Trunking.
-   - Thêm nút điều hướng **🖥️ Proxmox VE** vào thanh menu chính (`Layout.jsx`) và định tuyến `/proxmox` trong `App.jsx`.
-   - Biên dịch Vite thành công 100%, kiểm thử tương tác máy ảo và biểu đồ thời gian thực trực tiếp trên trình duyệt.
+### Phiên 31 (2026-09-14) — Tái Thiết Kế Toàn Bộ Giao Diện Theo Chuẩn ServerKit Design System (Infra Console Architecture)
+1. **Chuyển Đổi Hệ Thống CSS Tokens & Theme (`DESIGN_SYSTEM_RULES.md`)**:
+   - Áp dụng chuẩn **Dark-First** (`#0a0b0e`) hỗ trợ đồng thời **Light Theme** (`#f6f7fb`) & **System Theme**.
+   - Tích hợp `ThemeProvider` (`frontend/src/context/ThemeContext.jsx`) lưu lựa chọn vào `localStorage`, gán runtime attribute `data-theme` lên thẻ `<html>`.
+   - Cài đặt bộ phông chuẩn kỹ thuật tự lưu trữ (Self-hosted 100% offline/air-gapped): Tải toàn bộ 66 file `.woff2` vào `frontend/public/fonts/` và khai báo qua `frontend/src/fonts.css` cho **IBM Plex Sans** (giao diện chung) và **IBM Plex Mono** (IP, Domain, Uptime, Bytes, Port, KPI, Table headers).
+   - Thiết lập họa tiết lưới nền kỹ thuật 40x40px (`.bg-grid`).
+2. **Hệ Thống Primitives Chuẩn ServerKit (`.sk-*`)**:
+   - Status Pill (`.sk-pill`, `.sk-pill__dot` với các biến thể `--green`, `--amber`, `--red`, `--cyan`, `--violet`).
+   - State Chip (`.sk-state`) & Env Tag (`.sk-tag`).
+   - Segmented Control (`.sk-seg`, `.sk-seg__btn`, `.sk-seg__count`).
+   - MetricCard / KPI Tile (`.sk-kpi`, `.sk-kpiband`) kèm font mono tabular-nums.
+   - Data Table chuẩn (`.sk-dtable`) với thead gradient, border 1px tinh tế và hover state mượt mà.
+   - Floating BulkBar (`.sk-bulkbar`) nổi lên ở đáy màn hình khi tick chọn nhiều người dùng.
+   - Button System (`.btn`, `.btn-primary`, `.btn-secondary`, `.btn-soft`, `.btn-danger`, `.btn-ghost`, `.btn-sm`, `.btn-icon`).
+3. **Tái Cấu Trúc Toàn Bộ Components & Màn Hình Nghiệp Vụ**:
+   - **`Layout.jsx`**: Sidebar 250px cố định, viền mờ `var(--border-soft)`, brand logo, RouterOS badge, phân nhóm điều hướng rõ ràng, Theme toggle Sáng/Tối, Connection status và mobile off-canvas drawer.
+   - **`DashboardPage.jsx`**: Topbar với SSE Live indicator, KPI Band 4 cột, phân bố người dùng theo profile và bảng phiên hoạt động gần đây.
+   - **`SystemPerformancePage.jsx`**: Đồng bộ thời gian thực chu kỳ linh hoạt (1s/1.5s/3s), 4 thẻ Gauges (CPU, RAM, Bandwidth, Flash), 2 đồ thị SVG Real-time Area/Line, bảng Interface Traffic Monitor và thông số RouterBOARD.
+   - **`ProxmoxPerformancePage.jsx`**: Topbar hypervisor, 6 KPI gauges, 2 đồ thị sóng SVG, bảng KVM/LXC với segmented filter và action buttons (Start, Stop, Reboot), Storage pools và Linux Bridges.
+   - **`UsersPage.jsx`**: Segmented tab chuyển đổi linh hoạt giữa Người dùng và Hồ sơ, bảng `.sk-dtable` với checkbox, thanh `.sk-bulkbar` nổi đáy màn hình, In thẻ WiFi voucher, xuất CSV, modal CRUD an toàn.
+   - **`ProfilesPage.jsx`**: Quản lý gói cước `/ip/hotspot/user/profile`, hiển thị rate-limit, shared-users, mac-cookie.
+   - **`SessionsPage.jsx`**: Bảng phiên active, IP/MAC/Uptime/Bytes dạng mono, ngắt kết nối an toàn.
+   - **`SettingsPage.jsx`**: Quản lý tài khoản hệ thống `/user`, mẫu in thẻ WiFi voucher kèm live preview card, quản lý sao lưu và xuất file script `.rsc` / `.backup` kèm modal xem trước code, lệnh CLI WinBox.
+   - **`LoginPage.jsx`**: Màn hình đăng nhập phong cách Infra Console với background technical grid, form focus accent glow.
+   - **`CustomSelect.jsx`**, **`Modal.jsx`**, **`useToast.jsx`**, **`Spinner.jsx`**, **`StatCard.jsx`**, **`ConnectionStatus.jsx`**: Đồng bộ 100% tokens mới.
+4. **Bảo Toàn 100% Logic Nghiệp Vụ & Kiểm Thử**:
+   - Tuyệt đối không thay đổi logic API, xác thực, SSE streams, CRUD hay print engine.
+   - Build production frontend (`npm run build`) thành công 100% không phát sinh lỗi.
 
 ---
 

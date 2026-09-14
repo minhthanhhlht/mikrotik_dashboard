@@ -14,7 +14,7 @@ export function ToastProvider({ children }) {
       const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       const newToast = { id, message, type, title, duration };
 
-      setToasts((prev) => [...prev.slice(-4), newToast]); // Giữ tối đa 5 popup đồng thời
+      setToasts((prev) => [...prev.slice(-4), newToast]);
 
       if (duration > 0) {
         setTimeout(() => {
@@ -41,71 +41,68 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={toast}>
       {children}
-      {/* Toast Overlay Container */}
+      {/* Toast Overlay Container - Z-Index 9999 */}
       <div
         aria-live="polite"
-        className="pointer-events-none fixed right-4 top-4 z-[9999] flex max-h-screen w-full max-w-sm flex-col gap-3"
+        className="pointer-events-none fixed right-5 top-5 z-[9999] flex max-h-screen w-full max-w-sm flex-col gap-2.5"
       >
         {toasts.map((t) => {
           const isSuccess = t.type === 'success';
           const isError = t.type === 'error';
           const isWarning = t.type === 'warning';
 
-          const borderClass = isSuccess
-            ? 'border-primary/40 bg-white/95 text-ink shadow-[0_10px_30px_rgba(0,132,255,0.22)]'
+          const iconColor = isSuccess
+            ? 'var(--green)'
             : isError
-            ? 'border-danger/40 bg-white/95 text-ink shadow-[0_10px_30px_rgba(225,29,72,0.22)]'
+            ? 'var(--red)'
             : isWarning
-            ? 'border-warning/40 bg-white/95 text-ink shadow-[0_10px_30px_rgba(217,119,6,0.22)]'
-            : 'border-tertiary/40 bg-white/95 text-ink shadow-[0_10px_30px_rgba(124,58,237,0.22)]';
-
-          const iconBg = isSuccess
-            ? 'bg-gradient-to-br from-primary to-[#00a2ff] text-white shadow-[0_0_12px_rgba(0,132,255,0.6)]'
-            : isError
-            ? 'bg-gradient-to-br from-danger to-[#f43f5e] text-white shadow-[0_0_12px_rgba(225,29,72,0.6)]'
-            : isWarning
-            ? 'bg-gradient-to-br from-warning to-[#f59e0b] text-white shadow-[0_0_12px_rgba(217,119,6,0.6)]'
-            : 'bg-gradient-to-br from-tertiary to-[#a855f7] text-white shadow-[0_0_12px_rgba(124,58,237,0.6)]';
-
-          const titleColor = isSuccess
-            ? 'text-primary'
-            : isError
-            ? 'text-danger'
-            : isWarning
-            ? 'text-warning'
-            : 'text-tertiary';
+            ? 'var(--amber)'
+            : 'var(--accent-bright)';
 
           const iconSymbol = isSuccess ? '✓' : isError ? '✕' : isWarning ? '!' : 'ℹ';
 
           return (
             <div
               key={t.id}
-              className={`pointer-events-auto flex w-full items-start gap-3 rounded-2xl border p-4 backdrop-blur-2xl transition-all duration-300 animate-in fade-in slide-in-from-top-4 ${borderClass}`}
+              className="pointer-events-auto flex w-full items-start gap-3 rounded-[var(--radius)] border border-[var(--border-strong)] bg-[var(--surface-2)] p-3.5 shadow-[var(--shadow-lg)] backdrop-blur-md transition-all duration-200"
               role="alert"
             >
               <div
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl font-bold text-sm ${iconBg}`}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[var(--radius-sm)] font-mono font-bold text-xs"
+                style={{
+                  color: iconColor,
+                  background: isSuccess
+                    ? 'var(--green-bg)'
+                    : isError
+                    ? 'var(--red-bg)'
+                    : isWarning
+                    ? 'var(--amber-bg)'
+                    : 'var(--accent-bg)',
+                }}
               >
                 {iconSymbol}
               </div>
 
-              <div className="flex-1 min-w-0 pt-0.5">
+              <div className="flex-1 min-w-0">
                 {t.title && (
-                  <h4 className={`text-xs font-bold tracking-tight uppercase ${titleColor}`}>
+                  <h4
+                    className="text-xs font-mono font-bold uppercase tracking-wider"
+                    style={{ color: iconColor }}
+                  >
                     {t.title}
                   </h4>
                 )}
-                <p className="mt-0.5 text-xs font-semibold text-ink break-words leading-relaxed">
+                <p className="mt-0.5 text-xs text-[var(--text)] break-words leading-relaxed">
                   {t.message}
                 </p>
               </div>
 
               <button
                 onClick={() => removeToast(t.id)}
-                className="shrink-0 rounded-lg p-1 text-ink-faint transition hover:bg-ink/5 hover:text-ink"
+                className="shrink-0 rounded-[var(--radius-sm)] p-1 text-[var(--text-faint)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
                 title="Đóng"
               >
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <path d="M18 6L6 18M6 6l12 12" />
                 </svg>
               </button>

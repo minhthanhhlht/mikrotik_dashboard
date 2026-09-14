@@ -2,10 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { useToast } from '../hooks/useToast.jsx';
 import Spinner from '../components/Spinner.jsx';
-import CustomSelect from '../components/CustomSelect.jsx';
 import { formatBytes, formatDuration } from '../utils/format.js';
 
-// Kích thước mảng đệm đồ thị thời gian thực (30 giây)
 const BUFFER_SIZE = 30;
 
 function createEmptyBuffer(length = BUFFER_SIZE) {
@@ -22,11 +20,9 @@ export default function ProxmoxPerformancePage() {
   const [lastUpdate, setLastUpdate] = useState(null);
   const [actionBusyId, setActionBusyId] = useState(null);
 
-  // Bộ lọc danh sách VM / LXC
-  const [guestTab, setGuestTab] = useState('all'); // 'all' | 'qemu' | 'lxc' | 'running'
+  const [guestTab, setGuestTab] = useState('all');
   const [guestSearch, setGuestSearch] = useState('');
 
-  // Bộ đệm lịch sử biểu đồ sóng SVG
   const [cpuHistory, setCpuHistory] = useState(() => createEmptyBuffer());
   const [memHistory, setMemHistory] = useState(() => createEmptyBuffer());
   const [netRxHistory, setNetRxHistory] = useState(() => createEmptyBuffer());
@@ -34,7 +30,6 @@ export default function ProxmoxPerformancePage() {
 
   const eventSourceRef = useRef(null);
 
-  // Tải dữ liệu ban đầu
   async function loadInitial() {
     setLoading(true);
     setError('');
@@ -49,7 +44,6 @@ export default function ProxmoxPerformancePage() {
     }
   }
 
-  // Kết nối luồng Server-Sent Events (SSE) thời gian thực
   useEffect(() => {
     let es;
     let fallbackTimer;
@@ -68,7 +62,6 @@ export default function ProxmoxPerformancePage() {
             setError('');
             setLastUpdate(new Date());
 
-            // Đẩy vào bộ đệm biểu đồ
             const cpuVal = parsed?.node?.cpuPercentage ?? 0;
             const memVal = parsed?.node?.memory?.percentage ?? 0;
             const rxMbps = parsed?.traffic?.rxMbps ?? 0;
@@ -85,7 +78,6 @@ export default function ProxmoxPerformancePage() {
 
         es.onerror = () => {
           es.close();
-          // Fallback sang polling nếu SSE không khả dụng
           if (!fallbackTimer) {
             fallbackTimer = setInterval(async () => {
               if (isPaused) return;
@@ -114,7 +106,6 @@ export default function ProxmoxPerformancePage() {
     };
   }, [isPaused, streamInterval]);
 
-  // Xử lý bật / tắt / khởi động lại VM hoặc LXC
   async function handleGuestAction(guest, action) {
     const actionNames = {
       start: 'Khởi động',
@@ -130,7 +121,6 @@ export default function ProxmoxPerformancePage() {
         `Đã gửi lệnh "${actName}" tới ${guest.type.toUpperCase()} ${guest.vmid} (${guest.name})`,
         'Thao tác thành công'
       );
-      // Tải lại dữ liệu ngay
       const updated = await api.proxmoxSummary();
       setData(updated);
     } catch (err) {
@@ -140,24 +130,20 @@ export default function ProxmoxPerformancePage() {
     }
   }
 
-  // Danh sách máy ảo & container đã lọc
   const filteredGuests = useMemo(() => {
     if (!data?.guests) return [];
     const q = guestSearch.trim().toLowerCase();
     return data.guests.filter((g) => {
-      // Lọc theo Tab
       if (guestTab === 'qemu' && g.type !== 'qemu') return false;
       if (guestTab === 'lxc' && g.type !== 'lxc') return false;
       if (guestTab === 'running' && g.status !== 'running') return false;
 
-      // Tìm kiếm theo từ khóa
       if (!q) return true;
       const haystack = `${g.vmid} ${g.name} ${g.os || ''} ${g.ip || ''} ${g.description || ''} ${(g.tags || []).join(' ')}`.toLowerCase();
       return haystack.includes(q);
     });
   }, [data?.guests, guestTab, guestSearch]);
 
-  // Hàm vẽ đường cong SVG Spline
   function renderSvgPath(dataPoints, height = 80, width = 300, maxVal = 100) {
     if (!dataPoints || dataPoints.length === 0) return '';
     const step = width / (dataPoints.length - 1);
@@ -182,31 +168,28 @@ export default function ProxmoxPerformancePage() {
   const traffic = data?.traffic;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      {/* 1. Header Trang & Trạng thái Node Hypervisor */}
-      <header className="flex flex-wrap items-center justify-between gap-4">
+    <div className="space-y-6">
+      {/* 1. Header Trang */}
+      <div className="sk-topbar flex-wrap">
         <div>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-bold tracking-tight text-ink">
-              Proxmox VE Hypervisor
-              <span className="text-primary">.</span>
-            </h1>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-600 shadow-[0_0_12px_rgba(16,185,129,0.2)]">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              Node: {node?.node || 'pve-master'} (Online)
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="sk-title">Proxmox VE Hypervisor</h1>
+            <span className="sk-pill sk-pill--green text-[10px]">
+              <span className="sk-pill__dot" />
+              Node: {node?.node || 'pve-master'}
             </span>
-            <span className="rounded-xl bg-primary-soft/60 px-2.5 py-1 text-[11px] font-bold text-primary-deep">
-              {data?.mode === 'mock' ? '🧪 Mock Engine Real-time' : '🌐 Kết nối PVE Thật'}
+            <span className="sk-tag sk-tag--dev text-[9px]">
+              {data?.mode === 'mock' ? 'MOCK ENGINE' : 'LIVE API'}
             </span>
           </div>
-          <p className="mt-1 text-xs md:text-sm text-ink-soft">
-            Giám sát thời gian thực máy chủ Proxmox VE 8.x · KVM Virtual Machines · LXC Containers · ZFS Storage
+          <p className="sk-subtitle font-mono">
+            Giám sát thời gian thực Proxmox VE 8.x · KVM Virtual Machines · LXC Containers · ZFS Storage
           </p>
         </div>
 
         {/* Thanh điều khiển Live Stream & Tần suất */}
         <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex items-center gap-1 rounded-xl border border-white/60 bg-white/40 p-1 backdrop-blur-md">
+          <div className="sk-seg">
             {[
               { label: '1s', val: 1000 },
               { label: '1.5s', val: 1500 },
@@ -216,11 +199,7 @@ export default function ProxmoxPerformancePage() {
                 key={item.val}
                 type="button"
                 onClick={() => setStreamInterval(item.val)}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
-                  streamInterval === item.val
-                    ? 'bg-primary text-white shadow-[0_0_12px_rgba(0,132,255,0.45)]'
-                    : 'text-ink-soft hover:bg-white/60'
-                }`}
+                className={`sk-seg__btn ${streamInterval === item.val ? 'is-on' : ''}`}
               >
                 {item.label}
               </button>
@@ -230,308 +209,246 @@ export default function ProxmoxPerformancePage() {
           <button
             type="button"
             onClick={() => setIsPaused(!isPaused)}
-            className={`btn-ghost px-3.5 py-2 text-xs font-bold transition ${
-              isPaused ? 'text-amber-600 bg-amber-50' : 'text-primary'
-            }`}
-            title={isPaused ? 'Tiếp tục nhận luồng dữ liệu' : 'Tạm dừng biểu đồ'}
+            className={`btn btn-sm ${isPaused ? 'btn-primary' : 'btn-secondary'}`}
           >
-            {isPaused ? '▶️ Tiếp tục' : '⏸️ Tạm dừng'}
+            {isPaused ? '▶ Tiếp tục' : '⏸ Tạm dừng'}
           </button>
 
           <button
             type="button"
             onClick={loadInitial}
             disabled={loading}
-            className="btn-primary px-3.5 py-2 text-xs font-bold"
-            title="Làm mới ngay"
+            className="btn btn-secondary btn-sm"
           >
-            {loading ? <Spinner size="sm" /> : '⟳'} Làm mới
+            {loading ? <Spinner size="xs" /> : '⟳'} Làm mới
           </button>
         </div>
-      </header>
+      </div>
 
-      {/* Thông báo lỗi nếu có */}
       {error && (
-        <div className="glass rounded-2xl border-danger/40 p-4 shadow-[0_0_24px_rgba(225,29,72,0.15)]">
+        <div className="rounded-[var(--radius-lg)] border border-[rgba(251,111,111,0.3)] bg-[var(--red-bg)] p-4 text-xs">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-danger">⚠️ {error}</p>
-            <button onClick={loadInitial} className="btn-danger px-3 py-1 text-xs">
+            <p className="font-semibold text-[var(--red)]">⚠️ {error}</p>
+            <button onClick={loadInitial} className="btn btn-danger btn-sm">
               Thử lại
             </button>
           </div>
         </div>
       )}
 
-      {/* 2. Hàng KPI Gauges Neon Giám sát Node */}
-      <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-6">
+      {/* 2. Hàng 6 KPI Gauges Giám sát Node */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {/* KPI 1: CPU Load */}
-        <div className="glass rounded-2xl p-4 shadow-xs relative overflow-hidden group hover:border-primary/40 transition">
-          <div className="flex items-center justify-between">
-            <span className="label-caps text-[11px] text-ink-soft">Tải CPU Node</span>
-            <span className="text-base">⚡</span>
+        <div className="sk-kpi p-3.5">
+          <div className="sk-kpi__header mb-1">
+            <span className="sk-kpi__label text-[10px]">CPU Node</span>
+            <span className="font-mono text-xs">⚡</span>
           </div>
-          <div className="mt-2 text-2xl font-bold font-mono tracking-tight text-ink">
+          <div className="font-mono text-xl font-bold text-[var(--text)]">
             {node?.cpuPercentage ?? 0}%
           </div>
-          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-ink/10">
+          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-3)]">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-primary to-[#00d2ff] shadow-[0_0_10px_rgba(0,132,255,0.7)] transition-all duration-500"
+              className="h-full rounded-full bg-[var(--accent)] transition-all duration-300"
               style={{ width: `${Math.min(100, node?.cpuPercentage ?? 0)}%` }}
             />
           </div>
-          <div className="mt-1.5 flex items-center justify-between text-[10px] text-ink-faint">
-            <span>{node?.cores ?? 8} Cores / {node?.threads ?? 16} Threads</span>
-            <span>Xeon E-2288G</span>
+          <div className="mt-1 text-[10px] font-mono text-[var(--text-faint)] truncate">
+            {node?.cores ?? 8}C / {node?.threads ?? 16}T
           </div>
         </div>
 
         {/* KPI 2: RAM Usage */}
-        <div className="glass rounded-2xl p-4 shadow-xs relative overflow-hidden group hover:border-primary/40 transition">
-          <div className="flex items-center justify-between">
-            <span className="label-caps text-[11px] text-ink-soft">Bộ nhớ RAM</span>
-            <span className="text-base">🧠</span>
+        <div className="sk-kpi p-3.5">
+          <div className="sk-kpi__header mb-1">
+            <span className="sk-kpi__label text-[10px]">Bộ nhớ RAM</span>
+            <span className="font-mono text-xs">🧠</span>
           </div>
-          <div className="mt-2 text-2xl font-bold font-mono tracking-tight text-ink">
+          <div className="font-mono text-xl font-bold text-[var(--text)]">
             {node?.memory?.percentage ?? 0}%
           </div>
-          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-ink/10">
+          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-3)]">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 shadow-[0_0_10px_rgba(168,85,247,0.7)] transition-all duration-500"
+              className="h-full rounded-full bg-[var(--violet)] transition-all duration-300"
               style={{ width: `${Math.min(100, node?.memory?.percentage ?? 0)}%` }}
             />
           </div>
-          <div className="mt-1.5 flex items-center justify-between text-[10px] text-ink-faint">
-            <span>{formatBytes(node?.memory?.used ?? 0)} / {formatBytes(node?.memory?.total ?? 0)}</span>
+          <div className="mt-1 text-[10px] font-mono text-[var(--text-faint)] truncate">
+            {formatBytes(node?.memory?.used ?? 0)} / {formatBytes(node?.memory?.total ?? 0)}
           </div>
         </div>
 
         {/* KPI 3: ZFS Pool Storage */}
-        <div className="glass rounded-2xl p-4 shadow-xs relative overflow-hidden group hover:border-primary/40 transition">
-          <div className="flex items-center justify-between">
-            <span className="label-caps text-[11px] text-ink-soft">ZFS Storage Pool</span>
-            <span className="text-base">💽</span>
+        <div className="sk-kpi p-3.5">
+          <div className="sk-kpi__header mb-1">
+            <span className="sk-kpi__label text-[10px]">ZFS Pool</span>
+            <span className="font-mono text-xs">💽</span>
           </div>
-          <div className="mt-2 text-2xl font-bold font-mono tracking-tight text-ink">
+          <div className="font-mono text-xl font-bold text-[var(--text)]">
             39.2%
           </div>
-          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-ink/10">
+          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-3)]">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 shadow-[0_0_10px_rgba(16,185,129,0.7)] transition-all duration-500"
+              className="h-full rounded-full bg-[var(--green)] transition-all duration-300"
               style={{ width: '39.2%' }}
             />
           </div>
-          <div className="mt-1.5 flex items-center justify-between text-[10px] text-ink-faint">
-            <span>785 GB / 2.0 TB NVMe</span>
-            <span className="text-emerald-600 font-bold">ONLINE</span>
+          <div className="mt-1 text-[10px] font-mono text-[var(--text-faint)] truncate">
+            785 GB / 2.0 TB NVMe
           </div>
         </div>
 
-        {/* KPI 4: Load Average & IO Wait */}
-        <div className="glass rounded-2xl p-4 shadow-xs relative overflow-hidden group hover:border-primary/40 transition">
-          <div className="flex items-center justify-between">
-            <span className="label-caps text-[11px] text-ink-soft">Load Average</span>
-            <span className="text-base">⏱️</span>
+        {/* KPI 4: Load Average */}
+        <div className="sk-kpi p-3.5">
+          <div className="sk-kpi__header mb-1">
+            <span className="sk-kpi__label text-[10px]">Load Average</span>
+            <span className="font-mono text-xs">⏱️</span>
           </div>
-          <div className="mt-2 text-2xl font-bold font-mono tracking-tight text-ink">
+          <div className="font-mono text-xl font-bold text-[var(--text)]">
             {node?.loadAverage ? node.loadAverage[0] : '1.45'}
           </div>
-          <div className="mt-2 flex items-center gap-1 text-[11px] font-mono text-ink-soft">
-            <span>[1m: {node?.loadAverage?.[0] || '1.45'}</span>
-            <span>5m: {node?.loadAverage?.[1] || '1.28'}</span>
-            <span>15m: {node?.loadAverage?.[2] || '1.15'}]</span>
+          <div className="mt-2 font-mono text-[10px] text-[var(--text-dim)]">
+            5m: {node?.loadAverage?.[1] || '1.28'} · 15m: {node?.loadAverage?.[2] || '1.15'}
           </div>
-          <div className="mt-1 flex items-center justify-between text-[10px] text-ink-faint">
-            <span>IO Wait: <b>{node?.ioWaitPercentage ?? 1.2}%</b></span>
-            <span>SWAP: <b>{node?.swap?.percentage ?? 7.5}%</b></span>
+          <div className="mt-1 text-[10px] font-mono text-[var(--text-faint)]">
+            IO Wait: {node?.ioWaitPercentage ?? 1.2}%
           </div>
         </div>
 
         {/* KPI 5: Live Network Bandwidth */}
-        <div className="glass rounded-2xl p-4 shadow-xs relative overflow-hidden group hover:border-primary/40 transition">
-          <div className="flex items-center justify-between">
-            <span className="label-caps text-[11px] text-ink-soft">Băng thông mạng</span>
-            <span className="text-base">🌐</span>
+        <div className="sk-kpi p-3.5">
+          <div className="sk-kpi__header mb-1">
+            <span className="sk-kpi__label text-[10px]">Băng thông</span>
+            <span className="font-mono text-xs">🌐</span>
           </div>
-          <div className="mt-2 text-2xl font-bold font-mono tracking-tight text-primary">
-            {traffic?.rxMbps ?? 0} <span className="text-xs font-sans text-ink-soft">Mbps</span>
+          <div className="font-mono text-xl font-bold text-[var(--accent-bright)]">
+            {traffic?.rxMbps ?? 0} <span className="text-xs font-normal text-[var(--text-dim)]">Mbps</span>
           </div>
-          <div className="mt-2 flex items-center justify-between text-[11px] font-mono">
-            <span className="text-emerald-600 font-bold">↓ {traffic?.rxMbps ?? 0} M</span>
-            <span className="text-violet-600 font-bold">↑ {traffic?.txMbps ?? 0} M</span>
+          <div className="mt-2 flex items-center justify-between font-mono text-[10px]">
+            <span className="text-[var(--green)]">↓ {traffic?.rxMbps ?? 0} M</span>
+            <span className="text-[var(--violet)]">↑ {traffic?.txMbps ?? 0} M</span>
           </div>
-          <div className="mt-1 flex items-center justify-between text-[10px] text-ink-faint">
-            <span>vmbr0 + vmbr1</span>
-            <span>10 GbE SFP+</span>
+          <div className="mt-1 text-[10px] font-mono text-[var(--text-faint)]">
+            vmbr0 + vmbr1
           </div>
         </div>
 
         {/* KPI 6: Tổng Máy ảo & Containers */}
-        <div className="glass rounded-2xl p-4 shadow-xs relative overflow-hidden group hover:border-primary/40 transition">
-          <div className="flex items-center justify-between">
-            <span className="label-caps text-[11px] text-ink-soft">Máy ảo & Containers</span>
-            <span className="text-base">🖥️</span>
+        <div className="sk-kpi p-3.5">
+          <div className="sk-kpi__header mb-1">
+            <span className="sk-kpi__label text-[10px]">VMs & LXCs</span>
+            <span className="font-mono text-xs">🖥️</span>
           </div>
-          <div className="mt-2 text-2xl font-bold font-mono tracking-tight text-ink">
-            {counts?.totalRunning ?? 6} <span className="text-xs font-sans text-ink-faint">/ {counts?.totalGuests ?? 7}</span>
+          <div className="font-mono text-xl font-bold text-[var(--text)]">
+            {counts?.totalRunning ?? 6} <span className="text-xs text-[var(--text-faint)]">/ {counts?.totalGuests ?? 7}</span>
           </div>
-          <div className="mt-2 flex items-center gap-2">
-            <span className="inline-flex items-center gap-1 rounded-md bg-primary-soft px-1.5 py-0.5 text-[10px] font-bold text-primary">
-              KVM: {counts?.vmsRunning ?? 3}/{counts?.vmsTotal ?? 4}
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-md bg-tertiary-soft px-1.5 py-0.5 text-[10px] font-bold text-tertiary">
-              LXC: {counts?.lxcsRunning ?? 3}/{counts?.lxcsTotal ?? 3}
-            </span>
+          <div className="mt-2 flex items-center gap-1.5 font-mono text-[10px]">
+            <span className="sk-tag sk-tag--prod py-0 px-1">KVM: {counts?.vmsRunning ?? 3}/{counts?.vmsTotal ?? 4}</span>
+            <span className="sk-tag sk-tag--dev py-0 px-1">LXC: {counts?.lxcsRunning ?? 3}/{counts?.lxcsTotal ?? 3}</span>
           </div>
-          <div className="mt-1 flex items-center justify-between text-[10px] text-ink-faint">
-            <span className="text-emerald-600 font-semibold">● {counts?.totalRunning ?? 6} Running</span>
-            <span className="text-rose-500 font-semibold">○ {counts?.totalStopped ?? 1} Stopped</span>
+          <div className="mt-1 text-[10px] font-mono text-[var(--text-faint)]">
+            ● {counts?.totalRunning ?? 6} Running · ○ {counts?.totalStopped ?? 1} Stopped
           </div>
         </div>
       </div>
 
-      {/* 3. Khối Biểu Đồ Sóng Vector SVG Thời Gian Thực */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        {/* Biểu đồ 1: Tải CPU Node & Mức sử dụng RAM (%) */}
-        <div className="glass rounded-2xl p-5 shadow-sm">
-          <div className="mb-3 flex items-center justify-between border-b border-white/40 pb-3">
-            <div className="flex items-center gap-2">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/15 text-primary text-xs">
-                📈
-              </span>
-              <div>
-                <h3 className="text-sm font-bold text-ink">Đồ thị Tải CPU & Sử dụng RAM Node (%)</h3>
-                <p className="text-[11px] text-ink-faint">Cập nhật liên tục 30 giây gần nhất</p>
-              </div>
+      {/* 3. Khối Biểu Đồ Sóng Vector SVG */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Biểu đồ 1: Tải CPU & RAM */}
+        <div className="sk-card">
+          <div className="mb-3 flex items-center justify-between border-b border-[var(--border-soft)] pb-3">
+            <div>
+              <h3 className="text-sm font-bold text-[var(--text)]">Đồ thị Tải CPU & Sử dụng RAM Node (%)</h3>
+              <p className="font-mono text-[11px] text-[var(--text-faint)]">30 giây gần nhất</p>
             </div>
-            <div className="flex items-center gap-3 text-xs font-semibold">
-              <span className="flex items-center gap-1.5 text-primary">
-                <span className="h-2.5 w-2.5 rounded-full bg-primary shadow-[0_0_8px_rgba(0,132,255,0.8)]" />
-                CPU: <b>{node?.cpuPercentage ?? 0}%</b>
-              </span>
-              <span className="flex items-center gap-1.5 text-fuchsia-600">
-                <span className="h-2.5 w-2.5 rounded-full bg-fuchsia-500 shadow-[0_0_8px_rgba(217,70,239,0.8)]" />
-                RAM: <b>{node?.memory?.percentage ?? 0}%</b>
-              </span>
+            <div className="flex items-center gap-3 font-mono text-xs">
+              <span className="text-[var(--accent-bright)]">CPU: {node?.cpuPercentage ?? 0}%</span>
+              <span className="text-[var(--violet)]">RAM: {node?.memory?.percentage ?? 0}%</span>
             </div>
           </div>
 
-          <div className="relative h-32 w-full overflow-hidden rounded-xl border border-white/50 bg-white/40 p-2">
+          <div className="relative h-32 w-full">
             <svg viewBox="0 0 300 80" className="h-full w-full overflow-visible" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="pveCpuGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#0084ff" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="#0084ff" stopOpacity="0.0" />
-                </linearGradient>
-                <linearGradient id="pveMemGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#d946ef" stopOpacity="0.3" />
-                  <stop offset="100%" stopColor="#d946ef" stopOpacity="0.0" />
-                </linearGradient>
-              </defs>
-
-              {/* Grid lines */}
-              <line x1="0" y1="20" x2="300" y2="20" stroke="rgba(0,0,0,0.05)" strokeDasharray="3 3" />
-              <line x1="0" y1="40" x2="300" y2="40" stroke="rgba(0,0,0,0.05)" strokeDasharray="3 3" />
-              <line x1="0" y1="60" x2="300" y2="60" stroke="rgba(0,0,0,0.05)" strokeDasharray="3 3" />
+              <line x1="0" y1="20" x2="300" y2="20" stroke="var(--border-soft)" strokeDasharray="3 3" />
+              <line x1="0" y1="40" x2="300" y2="40" stroke="var(--border-soft)" strokeDasharray="3 3" />
+              <line x1="0" y1="60" x2="300" y2="60" stroke="var(--border-soft)" strokeDasharray="3 3" />
 
               {/* RAM Area & Spline */}
               <path
                 d={`${renderSvgPath(memHistory, 80, 300, 100)} L 300,80 L 0,80 Z`}
-                fill="url(#pveMemGrad)"
+                fill="var(--violet)"
+                fillOpacity="0.08"
               />
               <path
                 d={renderSvgPath(memHistory, 80, 300, 100)}
                 fill="none"
-                stroke="#d946ef"
-                strokeWidth="2.2"
+                stroke="var(--violet)"
+                strokeWidth="2"
                 strokeLinecap="round"
-                className="transition-all duration-300"
               />
 
               {/* CPU Area & Spline */}
               <path
                 d={`${renderSvgPath(cpuHistory, 80, 300, 100)} L 300,80 L 0,80 Z`}
-                fill="url(#pveCpuGrad)"
+                fill="var(--accent)"
+                fillOpacity="0.1"
               />
               <path
                 d={renderSvgPath(cpuHistory, 80, 300, 100)}
                 fill="none"
-                stroke="#0084ff"
-                strokeWidth="2.5"
+                stroke="var(--accent)"
+                strokeWidth="2.2"
                 strokeLinecap="round"
-                className="transition-all duration-300"
               />
             </svg>
           </div>
         </div>
 
-        {/* Biểu đồ 2: Băng thông mạng qua Linux Bridges (Rx & Tx Mbps) */}
-        <div className="glass rounded-2xl p-5 shadow-sm">
-          <div className="mb-3 flex items-center justify-between border-b border-white/40 pb-3">
-            <div className="flex items-center gap-2">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 text-xs">
-                🌐
-              </span>
-              <div>
-                <h3 className="text-sm font-bold text-ink">Băng thông Mạng qua Bridges (vmbr0/1)</h3>
-                <p className="text-[11px] text-ink-faint">Lưu lượng dữ liệu mạng máy ảo & container (Mbps)</p>
-              </div>
+        {/* Biểu đồ 2: Băng thông qua Linux Bridges */}
+        <div className="sk-card">
+          <div className="mb-3 flex items-center justify-between border-b border-[var(--border-soft)] pb-3">
+            <div>
+              <h3 className="text-sm font-bold text-[var(--text)]">Băng thông Mạng qua Bridges (vmbr0/1)</h3>
+              <p className="font-mono text-[11px] text-[var(--text-faint)]">Lưu lượng dữ liệu mạng máy ảo (Mbps)</p>
             </div>
-            <div className="flex items-center gap-3 text-xs font-semibold">
-              <span className="flex items-center gap-1.5 text-emerald-600">
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
-                Download: <b>{traffic?.rxMbps ?? 0} Mbps</b>
-              </span>
-              <span className="flex items-center gap-1.5 text-violet-600">
-                <span className="h-2.5 w-2.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.8)]" />
-                Upload: <b>{traffic?.txMbps ?? 0} Mbps</b>
-              </span>
+            <div className="flex items-center gap-3 font-mono text-xs">
+              <span className="text-[var(--green)]">↓ {traffic?.rxMbps ?? 0} Mbps</span>
+              <span className="text-[var(--cyan)]">↑ {traffic?.txMbps ?? 0} Mbps</span>
             </div>
           </div>
 
-          <div className="relative h-32 w-full overflow-hidden rounded-xl border border-white/50 bg-white/40 p-2">
+          <div className="relative h-32 w-full">
             <svg viewBox="0 0 300 80" className="h-full w-full overflow-visible" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="pveNetRxGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
-                </linearGradient>
-                <linearGradient id="pveNetTxGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.3" />
-                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.0" />
-                </linearGradient>
-              </defs>
-
-              {/* Grid lines */}
-              <line x1="0" y1="20" x2="300" y2="20" stroke="rgba(0,0,0,0.05)" strokeDasharray="3 3" />
-              <line x1="0" y1="40" x2="300" y2="40" stroke="rgba(0,0,0,0.05)" strokeDasharray="3 3" />
-              <line x1="0" y1="60" x2="300" y2="60" stroke="rgba(0,0,0,0.05)" strokeDasharray="3 3" />
+              <line x1="0" y1="20" x2="300" y2="20" stroke="var(--border-soft)" strokeDasharray="3 3" />
+              <line x1="0" y1="40" x2="300" y2="40" stroke="var(--border-soft)" strokeDasharray="3 3" />
+              <line x1="0" y1="60" x2="300" y2="60" stroke="var(--border-soft)" strokeDasharray="3 3" />
 
               {/* Tx Spline */}
               <path
                 d={`${renderSvgPath(netTxHistory, 80, 300, 80)} L 300,80 L 0,80 Z`}
-                fill="url(#pveNetTxGrad)"
+                fill="var(--cyan)"
+                fillOpacity="0.08"
               />
               <path
                 d={renderSvgPath(netTxHistory, 80, 300, 80)}
                 fill="none"
-                stroke="#8b5cf6"
-                strokeWidth="2.2"
+                stroke="var(--cyan)"
+                strokeWidth="2"
                 strokeLinecap="round"
-                className="transition-all duration-300"
               />
 
               {/* Rx Spline */}
               <path
                 d={`${renderSvgPath(netRxHistory, 80, 300, 80)} L 300,80 L 0,80 Z`}
-                fill="url(#pveNetRxGrad)"
+                fill="var(--green)"
+                fillOpacity="0.1"
               />
               <path
                 d={renderSvgPath(netRxHistory, 80, 300, 80)}
                 fill="none"
-                stroke="#10b981"
-                strokeWidth="2.5"
+                stroke="var(--green)"
+                strokeWidth="2.2"
                 strokeLinecap="round"
-                className="transition-all duration-300"
               />
             </svg>
           </div>
@@ -539,38 +456,28 @@ export default function ProxmoxPerformancePage() {
       </div>
 
       {/* 4. Bảng Quản Lý Máy Ảo KVM & Container LXC */}
-      <section className="glass rounded-2xl p-5 shadow-sm">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-white/40 pb-4">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-[#00a2ff] text-white shadow-[0_0_16px_rgba(0,132,255,0.4)]">
-              🖥️
-            </span>
-            <div>
-              <h2 className="text-base font-bold text-ink">Danh sách Máy ảo (KVM) & Container (LXC)</h2>
-              <p className="text-xs text-ink-faint">
-                Quản lý trạng thái, cấp phát tài nguyên vCPU, RAM, IP và lưu lượng thời gian thực
-              </p>
-            </div>
+      <section className="sk-card">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-soft)] pb-4">
+          <div>
+            <h2 className="text-base font-bold text-[var(--text)]">Danh sách Máy ảo (KVM) & Container (LXC)</h2>
+            <p className="font-mono text-xs text-[var(--text-faint)]">
+              Quản lý trạng thái, cấp phát tài nguyên vCPU, RAM, IP và lưu lượng thời gian thực
+            </p>
           </div>
 
-          {/* Bộ lọc Tab & Ô tìm kiếm */}
           <div className="flex flex-wrap items-center gap-2.5">
-            <div className="flex items-center gap-1 rounded-xl border border-white/60 bg-white/40 p-1 backdrop-blur-md text-xs font-bold">
+            <div className="sk-seg">
               {[
                 { id: 'all', label: `Tất cả (${data?.guests?.length ?? 7})` },
                 { id: 'qemu', label: `KVM (${data?.counts?.vmsTotal ?? 4})` },
                 { id: 'lxc', label: `LXC (${data?.counts?.lxcsTotal ?? 3})` },
-                { id: 'running', label: `🟢 Chạy (${data?.counts?.totalRunning ?? 6})` },
+                { id: 'running', label: `Chạy (${data?.counts?.totalRunning ?? 6})` },
               ].map((tab) => (
                 <button
                   key={tab.id}
                   type="button"
                   onClick={() => setGuestTab(tab.id)}
-                  className={`rounded-lg px-2.5 py-1 transition ${
-                    guestTab === tab.id
-                      ? 'bg-primary text-white shadow-[0_0_10px_rgba(0,132,255,0.4)]'
-                      : 'text-ink-soft hover:bg-white/60'
-                  }`}
+                  className={`sk-seg__btn ${guestTab === tab.id ? 'is-on' : ''}`}
                 >
                   {tab.label}
                 </button>
@@ -578,245 +485,211 @@ export default function ProxmoxPerformancePage() {
             </div>
 
             <div className="relative w-56">
-              <svg
-                viewBox="0 0 20 20"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-faint"
-              >
-                <circle cx="9" cy="9" r="5.5" />
-                <path d="m13.5 13.5 3.5 3.5" strokeLinecap="round" />
-              </svg>
               <input
                 type="text"
                 value={guestSearch}
                 onChange={(e) => setGuestSearch(e.target.value)}
                 placeholder="Tìm theo tên / ID / IP…"
-                className="input-ghost pl-8 py-1.5 text-xs w-full"
+                className="form-input text-xs h-8"
               />
             </div>
           </div>
         </div>
 
-        {/* Bảng danh sách Máy ảo / Container */}
-        <div className="overflow-hidden rounded-xl border border-white/60 bg-white/40">
-          <div className="overflow-x-auto">
-            <table className="glass-table w-full text-left text-xs">
-              <thead>
-                <tr className="label-caps border-b border-ink/10">
-                  <th className="px-4 py-3 font-semibold">ID / Loại</th>
-                  <th className="px-4 py-3 font-semibold">Tên Máy Ảo & Hệ Điều Hành</th>
-                  <th className="px-4 py-3 font-semibold">Trạng thái</th>
-                  <th className="px-4 py-3 font-semibold">Địa chỉ IP</th>
-                  <th className="px-4 py-3 font-semibold">Tải vCPU</th>
-                  <th className="px-4 py-3 font-semibold">RAM Sử dụng / Cấp</th>
-                  <th className="px-4 py-3 font-semibold">Lưu lượng Mạng</th>
-                  <th className="px-4 py-3 font-semibold">Uptime</th>
-                  <th className="px-4 py-3 text-right font-semibold">Thao tác</th>
+        <div className="overflow-x-auto">
+          <table className="sk-dtable">
+            <thead>
+              <tr>
+                <th>ID / Loại</th>
+                <th>Tên Máy Ảo & Hệ Điều Hành</th>
+                <th>Trạng thái</th>
+                <th>Địa chỉ IP</th>
+                <th>Tải vCPU</th>
+                <th>RAM Dùng / Cấp</th>
+                <th>Lưu lượng Mạng</th>
+                <th>Uptime</th>
+                <th className="text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredGuests.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="py-8 text-center font-mono text-xs text-[var(--text-faint)]">
+                    Không tìm thấy máy ảo hoặc container nào phù hợp.
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-ink/5">
-                {filteredGuests.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-ink-faint">
-                      Không tìm thấy máy ảo hoặc container nào phù hợp.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredGuests.map((guest) => {
-                    const isRunning = guest.status === 'running';
-                    const isMikrotik = guest.vmid === 100 || guest.tags?.includes('mikrotik');
-                    const isLxc = guest.type === 'lxc';
+              ) : (
+                filteredGuests.map((guest) => {
+                  const isRunning = guest.status === 'running';
+                  const isMikrotik = guest.vmid === 100 || guest.tags?.includes('mikrotik');
+                  const isLxc = guest.type === 'lxc';
 
-                    return (
-                      <tr
-                        key={`${guest.type}-${guest.vmid}`}
-                        className={`transition hover:bg-white/60 ${
-                          isMikrotik ? 'bg-primary-soft/30' : ''
-                        }`}
-                      >
-                        {/* 1. ID & Badge Loại */}
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1.5 font-mono font-bold">
-                            <span
-                              className={`rounded-md px-1.5 py-0.5 text-[10px] uppercase tracking-wider ${
-                                isLxc
-                                  ? 'bg-tertiary-soft text-tertiary'
-                                  : 'bg-primary-soft text-primary-deep'
-                              }`}
-                            >
-                              {isLxc ? 'LXC' : 'KVM'}
-                            </span>
-                            <span className="text-ink">{guest.vmid}</span>
-                          </div>
-                        </td>
-
-                        {/* 2. Tên & OS Info */}
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2.5">
-                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/80 shadow-xs text-base">
-                              {isMikrotik ? '📡' : isLxc ? '📦' : '🖥️'}
-                            </span>
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5 font-bold text-ink">
-                                <span>{guest.name}</span>
-                                {isMikrotik && (
-                                  <span className="rounded-full bg-primary text-white px-2 py-0.2 text-[9px] font-bold shadow-[0_0_8px_rgba(0,132,255,0.6)]">
-                                    RouterOS Gateway
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-[11px] text-ink-faint">
-                                {guest.os} {guest.description ? `· ${guest.description}` : ''}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* 3. Trạng thái */}
-                        <td className="px-4 py-3">
-                          <span
-                            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
-                              isRunning
-                                ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
-                                : 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
-                            }`}
-                          >
-                            <span
-                              className={`h-1.5 w-1.5 rounded-full ${
-                                isRunning ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
-                              }`}
-                            />
-                            {isRunning ? 'Running' : 'Stopped'}
+                  return (
+                    <tr
+                      key={`${guest.type}-${guest.vmid}`}
+                      className={isMikrotik ? 'bg-[var(--accent-bg-soft)]' : ''}
+                    >
+                      {/* ID & Loại */}
+                      <td className="font-mono font-bold">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`sk-state text-[9px] ${isLxc ? 'sk-state--cyan' : 'sk-state--accent'}`}>
+                            {isLxc ? 'LXC' : 'KVM'}
                           </span>
-                        </td>
+                          <span>{guest.vmid}</span>
+                        </div>
+                      </td>
 
-                        {/* 4. Địa chỉ IP */}
-                        <td className="px-4 py-3 font-mono text-[11px] text-ink-soft">
-                          {guest.ip ? (
-                            <span className="rounded-md bg-ink/5 px-2 py-0.5">{guest.ip}</span>
-                          ) : (
-                            '—'
-                          )}
-                        </td>
-
-                        {/* 5. Tải vCPU */}
-                        <td className="px-4 py-3">
-                          {isRunning ? (
-                            <div className="w-24">
-                              <div className="flex items-center justify-between text-[11px] font-mono">
-                                <span>{Math.round((guest.cpuUsage || 0) * 100)}%</span>
-                                <span className="text-[10px] text-ink-faint">{guest.cpus} vCPU</span>
-                              </div>
-                              <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-ink/10">
-                                <div
-                                  className="h-full rounded-full bg-primary"
-                                  style={{ width: `${Math.min(100, Math.round((guest.cpuUsage || 0) * 100))}%` }}
-                                />
-                              </div>
+                      {/* Tên & OS */}
+                      <td>
+                        <div className="flex items-center gap-2">
+                          <div>
+                            <div className="flex items-center gap-1.5 font-semibold text-[var(--text)]">
+                              <span>{guest.name}</span>
+                              {isMikrotik && (
+                                <span className="sk-tag sk-tag--prod text-[8px] py-0 px-1">
+                                  GATEWAY
+                                </span>
+                              )}
                             </div>
-                          ) : (
-                            <span className="text-ink-faint">—</span>
-                          )}
-                        </td>
-
-                        {/* 6. RAM Sử dụng */}
-                        <td className="px-4 py-3 font-mono text-[11px] text-ink-soft">
-                          {isRunning ? (
-                            <div>
-                              <span>{formatBytes(guest.mem || 0)}</span>
-                              <span className="text-ink-faint"> / {formatBytes(guest.maxmem || 0)}</span>
+                            <div className="font-mono text-[11px] text-[var(--text-faint)]">
+                              {guest.os} {guest.description ? `· ${guest.description}` : ''}
                             </div>
-                          ) : (
-                            <span>{formatBytes(guest.maxmem || 0)} (Cấp)</span>
-                          )}
-                        </td>
+                          </div>
+                        </div>
+                      </td>
 
-                        {/* 7. Lưu lượng Mạng */}
-                        <td className="px-4 py-3 font-mono text-[11px]">
-                          {isRunning ? (
-                            <div className="text-[11px]">
-                              <span className="text-emerald-600 font-semibold">
-                                ↓ {((guest.netin || 0) / 1000000).toFixed(1)}M
-                              </span>{' '}
-                              <span className="text-violet-600 font-semibold">
-                                ↑ {((guest.netout || 0) / 1000000).toFixed(1)}M
-                              </span>
+                      {/* Trạng thái */}
+                      <td>
+                        {isRunning ? (
+                          <span className="sk-pill sk-pill--green text-[10px] py-0 px-2">
+                            <span className="sk-pill__dot" /> RUNNING
+                          </span>
+                        ) : (
+                          <span className="sk-pill sk-pill--red text-[10px] py-0 px-2">
+                            <span className="sk-pill__dot" /> STOPPED
+                          </span>
+                        )}
+                      </td>
+
+                      {/* IP */}
+                      <td className="font-mono text-xs text-[var(--text-dim)]">
+                        {guest.ip ? (
+                          <span className="rounded bg-[var(--surface-3)] px-1.5 py-0.5">{guest.ip}</span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+
+                      {/* vCPU */}
+                      <td>
+                        {isRunning ? (
+                          <div className="w-24">
+                            <div className="flex items-center justify-between font-mono text-[11px]">
+                              <span>{Math.round((guest.cpuUsage || 0) * 100)}%</span>
+                              <span className="text-[10px] text-[var(--text-faint)]">{guest.cpus} vCPU</span>
                             </div>
-                          ) : (
-                            <span className="text-ink-faint">—</span>
-                          )}
-                        </td>
+                            <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-[var(--surface-3)]">
+                              <div
+                                className="h-full rounded-full bg-[var(--accent)]"
+                                style={{ width: `${Math.min(100, Math.round((guest.cpuUsage || 0) * 100))}%` }}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="font-mono text-xs text-[var(--text-faint)]">—</span>
+                        )}
+                      </td>
 
-                        {/* 8. Uptime */}
-                        <td className="px-4 py-3 text-ink-soft">
-                          {isRunning && guest.uptime ? formatDuration(guest.uptime) : '—'}
-                        </td>
+                      {/* RAM */}
+                      <td className="font-mono text-xs text-[var(--text-dim)]">
+                        {isRunning ? (
+                          <div>
+                            <span>{formatBytes(guest.mem || 0)}</span>
+                            <span className="text-[var(--text-faint)]"> / {formatBytes(guest.maxmem || 0)}</span>
+                          </div>
+                        ) : (
+                          <span>{formatBytes(guest.maxmem || 0)} (Cấp)</span>
+                        )}
+                      </td>
 
-                        {/* 9. Thao tác */}
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            {isRunning ? (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => handleGuestAction(guest, 'reboot')}
-                                  disabled={actionBusyId === guest.vmid}
-                                  className="btn-ghost px-2 py-1 text-[11px] font-semibold text-primary"
-                                  title="Khởi động lại máy ảo"
-                                >
-                                  ↺ Reboot
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleGuestAction(guest, 'shutdown')}
-                                  disabled={actionBusyId === guest.vmid}
-                                  className="rounded-lg px-2 py-1 text-[11px] font-semibold text-rose-500 hover:bg-rose-50 transition"
-                                  title="Tắt máy an toàn"
-                                >
-                                  ⏹ Stop
-                                </button>
-                              </>
-                            ) : (
+                      {/* Mạng */}
+                      <td className="font-mono text-xs">
+                        {isRunning ? (
+                          <div>
+                            <span className="text-[var(--green)] font-semibold">
+                              ↓ {((guest.netin || 0) / 1000000).toFixed(1)}M
+                            </span>{' '}
+                            <span className="text-[var(--violet)] font-semibold">
+                              ↑ {((guest.netout || 0) / 1000000).toFixed(1)}M
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-[var(--text-faint)]">—</span>
+                        )}
+                      </td>
+
+                      {/* Uptime */}
+                      <td className="font-mono text-xs text-[var(--text-faint)]">
+                        {isRunning && guest.uptime ? formatDuration(guest.uptime) : '—'}
+                      </td>
+
+                      {/* Thao tác */}
+                      <td className="text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {isRunning ? (
+                            <>
                               <button
                                 type="button"
-                                onClick={() => handleGuestAction(guest, 'start')}
+                                onClick={() => handleGuestAction(guest, 'reboot')}
                                 disabled={actionBusyId === guest.vmid}
-                                className="btn-primary px-2.5 py-1 text-[11px] font-semibold"
-                                title="Bật máy ảo"
+                                className="btn btn-secondary btn-sm text-[11px] px-2 py-0.5 h-7 font-mono"
+                                title="Khởi động lại máy ảo"
                               >
-                                ▶ Start
+                                ↺ Reboot
                               </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                              <button
+                                type="button"
+                                onClick={() => handleGuestAction(guest, 'shutdown')}
+                                disabled={actionBusyId === guest.vmid}
+                                className="btn btn-danger btn-sm text-[11px] px-2 py-0.5 h-7 font-mono"
+                                title="Tắt máy an toàn"
+                              >
+                                ⏹ Stop
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleGuestAction(guest, 'start')}
+                              disabled={actionBusyId === guest.vmid}
+                              className="btn btn-primary btn-sm text-[11px] px-2.5 py-0.5 h-7 font-mono"
+                              title="Bật máy ảo"
+                            >
+                              ▶ Start
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </section>
 
-      {/* 5. Khối Storage Pools & Linux Network Bridges */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      {/* 5. Storage Pools & Linux Network Bridges */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Storage Pools */}
-        <section className="glass rounded-2xl p-5 shadow-sm">
-          <div className="mb-3 flex items-center justify-between border-b border-white/40 pb-3">
-            <div className="flex items-center gap-2">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 text-xs">
-                💽
-              </span>
-              <div>
-                <h3 className="text-sm font-bold text-ink">Phân Vùng Ổ Cứng (Storage Pools)</h3>
-                <p className="text-[11px] text-ink-faint">ZFS Pools, Local Rootfs và Proxmox Backup Server</p>
-              </div>
+        <section className="sk-card">
+          <div className="mb-3 flex items-center justify-between border-b border-[var(--border-soft)] pb-3">
+            <div>
+              <h3 className="text-sm font-bold text-[var(--text)]">Phân Vùng Ổ Cứng (Storage Pools)</h3>
+              <p className="font-mono text-[11px] text-[var(--text-faint)]">ZFS Pools & Rootfs Storage</p>
             </div>
-            <span className="text-xs font-semibold text-ink-faint">
-              {data?.storage?.length ?? 3} Pools Active
+            <span className="sk-state sk-state--accent font-mono text-[10px]">
+              {data?.storage?.length ?? 3} POOLS
             </span>
           </div>
 
@@ -826,32 +699,30 @@ export default function ProxmoxPerformancePage() {
               return (
                 <div
                   key={st.storage}
-                  className="rounded-xl border border-white/60 bg-white/50 p-3.5 shadow-xs"
+                  className="rounded-[var(--radius-sm)] border border-[var(--border-soft)] bg-[var(--surface-2)] p-3"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-ink">{st.storage}</span>
-                      <span className="rounded-md bg-ink/5 px-2 py-0.5 text-[10px] font-bold uppercase text-ink-soft">
-                        {st.type}
-                      </span>
+                      <span className="font-mono text-xs font-bold text-[var(--text)]">{st.storage}</span>
+                      <span className="sk-state text-[9px]">{st.type}</span>
                     </div>
-                    <div className="text-xs font-bold font-mono text-ink">
-                      {pct}% <span className="text-[10px] font-normal text-ink-faint">({formatBytes(st.used)} / {formatBytes(st.total)})</span>
+                    <div className="font-mono text-xs font-bold text-[var(--text)]">
+                      {pct}% <span className="font-normal text-[var(--text-faint)]">({formatBytes(st.used)} / {formatBytes(st.total)})</span>
                     </div>
                   </div>
 
-                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-ink/10">
+                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-3)]">
                     <div
-                      className={`h-full rounded-full transition-all duration-500 ${
-                        pct > 80 ? 'bg-rose-500' : pct > 60 ? 'bg-amber-500' : 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        pct > 80 ? 'bg-[var(--red)]' : pct > 60 ? 'bg-[var(--amber)]' : 'bg-[var(--green)]'
                       }`}
                       style={{ width: `${pct}%` }}
                     />
                   </div>
 
-                  <div className="mt-1.5 flex items-center justify-between text-[11px] text-ink-faint">
+                  <div className="mt-1.5 flex items-center justify-between font-mono text-[10px] text-[var(--text-faint)]">
                     <span>{st.description}</span>
-                    <span className="font-bold text-emerald-600">Còn trống: {formatBytes(st.avail)}</span>
+                    <span className="font-bold text-[var(--green)]">Trống: {formatBytes(st.avail)}</span>
                   </div>
                 </div>
               );
@@ -860,19 +731,14 @@ export default function ProxmoxPerformancePage() {
         </section>
 
         {/* Linux Network Bridges */}
-        <section className="glass rounded-2xl p-5 shadow-sm">
-          <div className="mb-3 flex items-center justify-between border-b border-white/40 pb-3">
-            <div className="flex items-center gap-2">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/15 text-primary text-xs">
-                🔌
-              </span>
-              <div>
-                <h3 className="text-sm font-bold text-ink">Cổng Mạng & Linux Bridges (Networking)</h3>
-                <p className="text-[11px] text-ink-faint">Card mạng vật lý, Virtual Bridges và VLAN trunking</p>
-              </div>
+        <section className="sk-card">
+          <div className="mb-3 flex items-center justify-between border-b border-[var(--border-soft)] pb-3">
+            <div>
+              <h3 className="text-sm font-bold text-[var(--text)]">Cổng Mạng & Linux Bridges (Networking)</h3>
+              <p className="font-mono text-[11px] text-[var(--text-faint)]">Virtual Bridges & VLAN Trunking</p>
             </div>
-            <span className="text-xs font-semibold text-ink-faint">
-              {data?.network?.length ?? 4} Interfaces
+            <span className="sk-state sk-state--accent font-mono text-[10px]">
+              {data?.network?.length ?? 4} BRIDGES
             </span>
           </div>
 
@@ -880,38 +746,37 @@ export default function ProxmoxPerformancePage() {
             {(data?.network || []).map((iface) => (
               <div
                 key={iface.iface}
-                className="flex items-center justify-between gap-3 rounded-xl border border-white/60 bg-white/50 p-3 shadow-xs"
+                className="flex items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--border-soft)] bg-[var(--surface-2)] p-3"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary text-xs font-bold font-mono">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--surface-3)] text-[var(--accent-bright)] text-xs font-bold font-mono">
                     {iface.type === 'bridge' ? 'BR' : 'NIC'}
                   </span>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-ink">{iface.iface}</span>
+                      <span className="font-mono text-xs font-bold text-[var(--text)]">{iface.iface}</span>
                       {iface.cidr && (
-                        <span className="rounded-md bg-primary-soft px-1.5 py-0.5 text-[10px] font-mono font-bold text-primary-deep">
+                        <span className="rounded bg-[var(--accent-bg)] px-1.5 py-0.2 text-[10px] font-mono text-[var(--accent-bright)]">
                           {iface.cidr}
                         </span>
                       )}
                       {iface.bridge_vlan_aware ? (
-                        <span className="rounded-md bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-bold text-violet-600">
-                          VLAN Aware
+                        <span className="sk-tag sk-tag--dev text-[8px] py-0 px-1">
+                          VLAN AWARE
                         </span>
                       ) : null}
                     </div>
-                    <div className="text-[11px] text-ink-faint truncate">
+                    <div className="font-mono text-[11px] text-[var(--text-faint)] truncate">
                       {iface.comment}
                     </div>
                   </div>
                 </div>
 
                 <div className="text-right shrink-0">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    UP
+                  <span className="sk-pill sk-pill--green text-[9px] py-0 px-1.5">
+                    <span className="sk-pill__dot" /> UP
                   </span>
-                  <div className="text-[10px] font-mono text-ink-faint mt-0.5">
+                  <div className="font-mono text-[10px] text-[var(--text-faint)] mt-0.5">
                     {iface.speed}
                   </div>
                 </div>
@@ -921,16 +786,14 @@ export default function ProxmoxPerformancePage() {
         </section>
       </div>
 
-      {/* 6. Footer thông số Phần cứng Hypervisor */}
-      <footer className="glass rounded-2xl p-4 shadow-xs text-xs text-ink-soft flex flex-wrap items-center justify-between gap-3">
+      {/* 6. Footer Hypervisor */}
+      <footer className="sk-card p-4 text-xs font-mono text-[var(--text-faint)] flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span>🖥️ <b>Kernel:</b> Linux 6.8.4-2-pve</span>
+          <span>🖥️ Kernel: Linux 6.8.4-2-pve</span>
           <span>·</span>
-          <span>⚙️ <b>CPU:</b> Intel(R) Xeon(R) E-2288G @ 3.70GHz (8C/16T)</span>
-          <span>·</span>
-          <span>⏱️ <b>Uptime Node:</b> {node?.uptimeSeconds ? formatDuration(node.uptimeSeconds) : '18 ngày'}</span>
+          <span>⏱️ Uptime Node: {node?.uptimeSeconds ? formatDuration(node.uptimeSeconds) : '18 ngày'}</span>
         </div>
-        <div className="text-[11px] text-ink-faint">
+        <div>
           Đồng bộ lần cuối: {lastUpdate ? lastUpdate.toLocaleTimeString('vi-VN') : '—'}
         </div>
       </footer>

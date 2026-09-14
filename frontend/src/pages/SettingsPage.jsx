@@ -35,16 +35,16 @@ export default function SettingsPage() {
   // Cấu hình Cài đặt hệ thống (Lưu tập trung JSON file trên backend)
   const [systemSettings, setSystemSettings] = useState(null);
   const [voucherSettings, setVoucherSettings] = useState({    
-      locationName: 'Nhà Mềnh',
-      ssid: 'MT_KHACH_5G',
-      loginUrl: 'http://192.168.20.1',
-      sampleUser: 'khach',
-      samplePassword: 'khongchiase',
-      sampleUptime: '',
-      sampleBytes: '',
-      sampleProfile: '',
-      hotline: '0888 561 297',
-      footerText: 'Chúc bạn trải nghiệm mạng tốc độ cao vui vẻ!',
+    locationName: 'Nhà Mềnh',
+    ssid: 'MT_KHACH_5G',
+    loginUrl: 'http://192.168.20.1',
+    sampleUser: 'khach',
+    samplePassword: 'khongchiase',
+    sampleUptime: '',
+    sampleBytes: '',
+    sampleProfile: '',
+    hotline: '0888 561 297',
+    footerText: 'Chúc bạn trải nghiệm mạng tốc độ cao vui vẻ!',
   });
   const [savingSettings, setSavingSettings] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState('');
@@ -72,7 +72,7 @@ export default function SettingsPage() {
     }
   }, []);
 
-  // Tự động lưu cấu hình khi người dùng chỉnh sửa (Auto-save with debounce 700ms)
+  // Tự động lưu cấu hình khi người dùng chỉnh sửa
   useEffect(() => {
     if (!hasLoadedInitial) return;
     const timer = setTimeout(async () => {
@@ -98,7 +98,6 @@ export default function SettingsPage() {
     return () => clearTimeout(timer);
   }, [voucherSettings, hasLoadedInitial]);
 
-  // Check health on mount
   async function checkHealth(manual = false) {
     setLoadingHealth(true);
     try {
@@ -121,14 +120,11 @@ export default function SettingsPage() {
     }
   }
 
-  // Danh sách tài khoản Hotspot từ MikroTik Router (/ip/hotspot/user) để chọn vào mẫu in thẻ
   const [hotspotUsers, setHotspotUsers] = useState([]);
   const [loadingHotspotUsers, setLoadingHotspotUsers] = useState(false);
   const [selectedHotspotUser, setSelectedHotspotUser] = useState('');
 
-  // ----------------------------------------------------------------------------
-  // Quản lý Sao lưu & Xuất cấu hình RouterOS (.backup & .rsc)
-  // ----------------------------------------------------------------------------
+  // Quản lý Sao lưu & Xuất cấu hình RouterOS
   const generateDefaultBackupName = () => {
     const d = new Date();
     const pad = (n) => String(n).padStart(2, '0');
@@ -138,7 +134,7 @@ export default function SettingsPage() {
   const [routerBackups, setRouterBackups] = useState([]);
   const [loadingBackups, setLoadingBackups] = useState(false);
   const [backupForm, setBackupForm] = useState({
-    type: 'rsc', // 'rsc' | 'backup'
+    type: 'rsc',
     name: generateDefaultBackupName(),
     showSensitive: true,
     compact: true,
@@ -151,7 +147,6 @@ export default function SettingsPage() {
   const [copiedPreview, setCopiedPreview] = useState(false);
   const [deletingBackupId, setDeletingBackupId] = useState(null);
 
-  // Tải trực tiếp file văn bản về máy tính của người dùng
   function downloadTextFile(filename, text) {
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -197,21 +192,19 @@ export default function SettingsPage() {
           toast.success(`Đã tạo file cấu hình script "${res.filename}" trên Router.`, 'Xuất file thành công');
         }
       } else {
-        // Tải ngay file binary .backup về máy tính cá nhân
         try {
           await api.downloadRouterBackup(res.filename);
           toast.success(
-            `Đã tạo bản sao lưu nhị phân "${res.filename}" (${formatBytes(res.size)}) và tải về máy tính của bạn!`,
+            `Đã tạo bản sao lưu nhị phân "${res.filename}" (${formatBytes(res.size)}) và tải về máy tính!`,
             'Sao lưu & Tải về thành công'
           );
         } catch (dlErr) {
           toast.success(
-            `Đã tạo bản sao lưu "${res.filename}" trên bộ nhớ Router (Lỗi tải tự động: ${dlErr.message}).`,
+            `Đã tạo bản sao lưu "${res.filename}" trên bộ nhớ Router.`,
             'Sao lưu hoàn tất'
           );
         }
       }
-      // Gợi ý tên mới cho lần tiếp theo
       setBackupForm((prev) => ({ ...prev, name: generateDefaultBackupName() }));
       loadRouterBackups();
     } catch (err) {
@@ -238,7 +231,7 @@ export default function SettingsPage() {
         toast.success(`Đã tải file script "${file.name}" về máy tính!`, 'Tải về hoàn tất');
       } else {
         await api.downloadRouterBackup(file.name);
-        toast.success(`Đã tải file sao lưu "${file.name}" về máy tính của bạn!`, 'Tải về hoàn tất');
+        toast.success(`Đã tải file sao lưu "${file.name}" về máy tính!`, 'Tải về hoàn tất');
       }
     } catch (err) {
       toast.error(`Lỗi tải file "${file.name}": ${err.message}`, 'Tải về thất bại');
@@ -294,13 +287,12 @@ export default function SettingsPage() {
         sampleProfile: target.profile || '',
       }));
       toast.success(
-        `Đã chọn "${newUser}" · Pass: ${newPass ? newPass : '(Trống)'} · Hạn: ${uptimeStr} · Data: ${bytesStr}`,
+        `Đã chọn "${newUser}" · Pass: ${newPass ? newPass : '(Trống)'}`,
         'Tự động điền theo User'
       );
     }
   }
 
-  // Load Dashboard Users (Admin only)
   const loadDashboardUsers = useCallback(async () => {
     if (!isAdmin) return;
     setLoadingUsers(true);
@@ -339,40 +331,11 @@ export default function SettingsPage() {
       } catch {}
       const timeStr = new Date().toLocaleTimeString('vi-VN');
       setLastSavedTime(timeStr);
-      toast.success(`Đã lưu mẫu in thẻ WiFi vào máy chủ (settings.json) lúc ${timeStr}!`, 'Lưu cài đặt');
+      toast.success(`Đã lưu mẫu in thẻ WiFi vào máy chủ!`, 'Lưu cài đặt');
     } catch (err) {
       toast.error('Lỗi lưu cấu hình: ' + err.message, 'Lỗi lưu');
     } finally {
       setSavingSettings(false);
-    }
-  }
-
-  async function handleResetVoucherSettings() {
-    const defaults = {
-      locationName: 'Nhà Mềnh',
-      ssid: 'MT_KHACH_5G',
-      loginUrl: 'http://192.168.20.1',
-      sampleUser: 'khach',
-      samplePassword: 'khongchiase',
-      hotline: '0888 561 297',
-      footerText: 'Chúc bạn trải nghiệm mạng tốc độ cao vui vẻ!',
-    };
-    setVoucherSettings(defaults);
-    try {
-      const payload = {
-        ...(systemSettings || {}),
-        voucher: defaults,
-      };
-      const res = await api.updateSettings(payload);
-      if (res?.settings) setSystemSettings(res.settings);
-      try {
-        localStorage.setItem('hs_voucher_settings', JSON.stringify(defaults));
-      } catch {}
-      const timeStr = new Date().toLocaleTimeString('vi-VN');
-      setLastSavedTime(timeStr);
-      toast.info('Đã khôi phục cấu hình mẫu in thẻ về mặc định (settings.json).', 'Khôi phục mặc định');
-    } catch (err) {
-      toast.error('Lỗi khôi phục cấu hình: ' + err.message, 'Lỗi khôi phục');
     }
   }
 
@@ -387,7 +350,6 @@ export default function SettingsPage() {
       : (v.sampleBytes || 'Không giới hạn');
     const profileText = active?.profile || v.sampleProfile || '';
 
-    // Đồng bộ lưu ngay trước khi in
     try {
       await api.updateSettings({
         ...(systemSettings || {}),
@@ -401,20 +363,20 @@ export default function SettingsPage() {
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 24px; background: #fff; color: #0f172a; }
         h2 { text-align: center; margin-bottom: 20px; font-size: 18px; font-weight: bold; color: #0f172a; }
         .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; max-width: 720px; margin: 0 auto; }
-        .card { border: 2px dashed #0084ff; border-radius: 12px; padding: 16px 18px; background: #f8fafc; page-break-inside: avoid; }
-        .location { font-size: 14px; font-weight: 800; color: #0084ff; text-transform: uppercase; letter-spacing: 0.5px; }
+        .card { border: 1.5px dashed #6d7cff; border-radius: 10px; padding: 16px 18px; background: #f8fafc; page-break-inside: avoid; }
+        .location { font-size: 14px; font-weight: 800; color: #4954cc; text-transform: uppercase; letter-spacing: 0.5px; }
         .ssid { font-size: 13px; color: #1e293b; margin: 4px 0 8px 0; font-weight: 600; }
         .divider { height: 1px; background: #cbd5e1; margin: 8px 0; }
         .row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; }
         .row span { color: #64748b; }
-        .highlight { font-family: monospace; font-size: 14px; font-weight: 700; color: #0f172a; background: #e0f2fe; padding: 1px 6px; border-radius: 4px; }
-        .hotline { font-size: 12px; color: #0284c7; margin-top: 6px; font-weight: 600; }
-        .login-url { font-size: 12px; color: #7c3aed; margin-top: 4px; font-weight: 600; }
+        .highlight { font-family: monospace; font-size: 14px; font-weight: 700; color: #0f172a; background: #eef1f7; padding: 1px 6px; border-radius: 4px; }
+        .hotline { font-size: 12px; color: #4954cc; margin-top: 6px; font-weight: 600; }
+        .login-url { font-size: 12px; color: #6d7cff; margin-top: 4px; font-weight: 600; }
         .footer { font-size: 11px; color: #94a3b8; text-align: center; margin-top: 10px; border-top: 1px dashed #cbd5e1; padding-top: 6px; }
         @media print {
           body { padding: 0; }
           .grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
-          .card { background: #fff; border-color: #0284c7; }
+          .card { background: #fff; border-color: #94a3b8; }
         }
       </style></head><body>
       <h2>Mẫu In Thử Thẻ Truy Cập WiFi — ${escapeHtml(v.locationName || 'Hotspot')}</h2>
@@ -539,7 +501,7 @@ export default function SettingsPage() {
 /ip/service set www disabled=no port=80
 /ip/service set www-ssl disabled=no port=443
 
-# Tạo user quản trị riêng cho Dashboard (thay <MAT_KHAU_MANH> bằng mật khẩu của bạn)
+# Tạo user quản trị riêng cho Dashboard
 /user add name=user_api group=full password="<MAT_KHAU_MANH>" comment="Hotspot Dashboard API"`;
 
   function copyCliScript() {
@@ -549,7 +511,6 @@ export default function SettingsPage() {
     setTimeout(() => setCopiedScript(false), 3000);
   }
 
-  // Lấy thông số Thời hạn & Dung lượng tự động theo User đang chọn
   const activeUser = hotspotUsers.find(
     (u) => u.name === voucherSettings.sampleUser || (selectedHotspotUser && u.name === selectedHotspotUser)
   );
@@ -562,119 +523,102 @@ export default function SettingsPage() {
   const userProfileDisplay = activeUser?.profile || voucherSettings.sampleProfile || '';
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="sk-topbar flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink">
-            Cài đặt hệ thống<span className="text-primary">.</span>
-          </h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            Cấu hình kết nối Router, mẫu in thẻ WiFi voucher và quản lý phân quyền người dùng
+          <h1 className="sk-title">Cài đặt hệ thống</h1>
+          <p className="sk-subtitle font-mono">
+            Cấu hình kết nối Router, mẫu in thẻ WiFi voucher & Quản lý phân quyền tài khoản
           </p>
         </div>
         <button
           onClick={() => checkHealth(true)}
           disabled={loadingHealth}
-          className="btn-ghost self-start px-3.5 py-2 text-xs font-semibold sm:self-auto"
+          className="btn btn-secondary btn-sm"
         >
-          {loadingHealth ? <Spinner size="sm" /> : '⚡'} Kiểm tra kết nối router
+          {loadingHealth ? <Spinner size="xs" /> : '⚡'} Kiểm tra kết nối router
         </button>
       </div>
 
-      {/* Quản lý tài khoản MikroTik System Users (/user) */}
+      {/* 1. Quản lý tài khoản MikroTik System Users (/user) */}
       {isAdmin && (
-        <section className="glass rounded-2xl p-6 shadow-sm">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-white/40 pb-4">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-[#00a2ff] text-white shadow-[0_0_16px_rgba(0,132,255,0.4)]">
-                👥
-              </span>
-              <div>
-                <h2 className="text-base font-bold text-ink">Quản lý Tài khoản Hệ thống MikroTik (/user)</h2>
-                <p className="text-xs text-ink-faint">
-                  Đồng bộ trực tiếp RouterOS 7 · Nhóm quyền chuẩn: <b>full</b> (Quản trị), <b>write</b> (Vận hành), <b>read</b> (Giám sát)
-                </p>
-              </div>
+        <section className="sk-card">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-soft)] pb-3">
+            <div>
+              <h2 className="text-base font-bold text-[var(--text)]">Tài khoản Hệ thống MikroTik (/user)</h2>
+              <p className="font-mono text-xs text-[var(--text-faint)]">
+                Đồng bộ RouterOS 7 · Nhóm quyền: <b>full</b> (Admin), <b>write</b> (Operator), <b>read</b> (Viewer)
+              </p>
             </div>
             <button
               onClick={openCreateUserModal}
-              className="btn-primary px-3.5 py-1.5 text-xs font-semibold"
+              className="btn btn-primary btn-sm"
             >
-              + Thêm tài khoản MikroTik
+              + Thêm tài khoản
             </button>
           </div>
 
           {loadingUsers ? (
             <Spinner label="Đang tải danh sách tài khoản từ MikroTik…" />
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-white/50 bg-white/30">
-              <table className="glass-table w-full text-left text-sm">
+            <div className="overflow-x-auto">
+              <table className="sk-dtable">
                 <thead>
-                  <tr className="label-caps">
-                    <th className="px-4 py-3 font-semibold">Tài khoản</th>
-                    <th className="px-4 py-3 font-semibold">Ghi chú / Họ tên</th>
-                    <th className="px-4 py-3 font-semibold">Nhóm MikroTik (Group)</th>
-                    <th className="px-4 py-3 font-semibold">Quyền Dashboard</th>
-                    <th className="px-4 py-3 text-right font-semibold">Thao tác</th>
+                  <tr>
+                    <th>Tài khoản</th>
+                    <th>Ghi chú / Họ tên</th>
+                    <th>Nhóm MikroTik</th>
+                    <th>Quyền Console</th>
+                    <th className="text-right">Thao tác</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-ink/5 text-xs">
+                <tbody>
                   {dashboardUsers.map((u) => (
                     <tr key={u.id || u.username}>
-                      <td className="px-4 py-3 font-mono font-bold text-ink">
+                      <td className="font-mono font-bold">
                         {u.username}
                         {u.username === user && (
-                          <span className="ml-2 rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                            (Bạn)
-                          </span>
+                          <span className="sk-state sk-state--accent ml-2 text-[9px]">BẠN</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-ink-soft">{u.fullName || '—'}</td>
-                      <td className="px-4 py-3 font-mono font-semibold text-primary-deep">
-                        <span className="rounded bg-primary-soft/80 px-2 py-0.5 text-[11px]">
+                      <td className="text-[var(--text-dim)]">{u.fullName || '—'}</td>
+                      <td className="font-mono">
+                        <span className="sk-state sk-state--cyan text-[10px]">
                           {u.group || (u.role === 'admin' ? 'full' : u.role === 'viewer' ? 'read' : 'write')}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td>
                         <span
-                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                          className={`sk-pill text-[10px] py-0 px-2 ${
                             u.group === 'full' || u.role === 'admin'
-                              ? 'bg-primary-soft text-primary-deep'
+                              ? 'sk-pill--accent'
                               : u.group === 'write' || u.role === 'operator'
-                              ? 'bg-warning-soft text-warning'
-                              : 'bg-tertiary-soft text-tertiary'
+                              ? 'sk-pill--amber'
+                              : 'sk-pill--cyan'
                           }`}
                         >
-                          <span
-                            className={`h-1.5 w-1.5 rounded-full ${
-                              u.group === 'full' || u.role === 'admin'
-                                ? 'bg-primary shadow-[0_0_6px_rgba(0,132,255,0.8)]'
-                                : u.group === 'write' || u.role === 'operator'
-                                ? 'bg-warning shadow-[0_0_6px_rgba(217,119,6,0.8)]'
-                                : 'bg-tertiary shadow-[0_0_6px_rgba(124,58,237,0.8)]'
-                            }`}
-                          />
+                          <span className="sk-pill__dot" />
                           {u.group === 'full' || u.role === 'admin'
-                            ? 'Quản trị viên (Toàn quyền)'
+                            ? 'ADMIN (FULL)'
                             : u.group === 'write' || u.role === 'operator'
-                            ? 'Nhân viên (Cấp voucher/Kick)'
-                            : 'Giám sát (Chỉ xem)'}
+                            ? 'OPERATOR (WRITE)'
+                            : 'VIEWER (READ)'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                      <td className="text-right">
+                        <div className="flex items-center justify-end gap-1.5 font-mono text-xs">
                           <button
                             onClick={() => openEditUserModal(u)}
-                            className="btn-ghost px-2.5 py-1 text-xs"
+                            className="btn btn-secondary btn-sm h-7 px-2 text-[11px]"
                           >
-                            Sửa / Đổi mật khẩu
+                            Sửa
                           </button>
                           {u.username !== user && u.group !== 'full' && (
                             <button
                               onClick={() => handleDeleteUser(u)}
                               disabled={busyUserId === u.id}
-                              className="rounded-lg px-2.5 py-1 text-xs font-semibold text-danger transition hover:bg-danger-soft disabled:opacity-50"
+                              className="btn btn-ghost btn-sm h-7 px-2 text-[11px] text-[var(--red)] hover:bg-[var(--red-bg)]"
                             >
                               {busyUserId === u.id ? '…' : 'Xóa'}
                             </button>
@@ -690,92 +634,81 @@ export default function SettingsPage() {
         </section>
       )}
 
-      {/* 2. Cấu hình Thẻ WiFi (Voucher Printing) */}
-      <section className="glass rounded-2xl p-6 shadow-sm">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-white/40 pb-3">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-secondary to-primary text-white shadow-[0_0_16px_rgba(0,132,255,0.3)]">
-              🎫
-            </span>
-            <div>
-              <h2 className="text-base font-bold text-ink">Mẫu in thẻ WiFi Voucher & Tài khoản / Mật khẩu</h2>
-              <p className="text-xs text-ink-faint">Tùy biến mẫu in phiếu truy cập cho khách hàng, bao gồm tài khoản, mật khẩu và cổng đăng nhập</p>
-            </div>
+      {/* 2. Cấu hình Thẻ WiFi Voucher */}
+      <section className="sk-card">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-soft)] pb-3">
+          <div>
+            <h2 className="text-base font-bold text-[var(--text)]">Mẫu in thẻ WiFi Voucher & Tài khoản</h2>
+            <p className="font-mono text-xs text-[var(--text-faint)]">
+              Tùy biến mẫu in phiếu truy cập cho khách hàng
+            </p>
           </div>
           <button
             type="button"
             onClick={printSampleCard}
-            className="btn-secondary px-3.5 py-1.5 text-xs font-semibold"
-            title="In thử một thẻ mẫu với cấu hình hiện tại"
+            className="btn btn-secondary btn-sm"
           >
-            🖨️ In thử 1 thẻ mẫu
+            🖨️ In thử thẻ mẫu
           </button>
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          {/* Cột trái: Form cấu hình (7 cột) */}
+          {/* Form cấu hình */}
           <form onSubmit={handleSaveVoucherSettings} className="space-y-4 lg:col-span-7">
-            <div className="flex items-center justify-between rounded-xl bg-white/40 px-3.5 py-2 text-xs text-ink-soft">
-              <span className="font-semibold text-ink">📁 Trạng thái lưu:</span>
+            <div className="flex items-center justify-between rounded-[var(--radius-sm)] bg-[var(--surface-2)] px-3 py-2 text-xs font-mono">
+              <span className="text-[var(--text-dim)]">📁 Trạng thái lưu:</span>
               {savingSettings ? (
-                <span className="inline-flex items-center gap-1.5 font-bold text-warning">
-                  <span className="h-2 w-2 animate-ping rounded-full bg-warning" />
-                  Đang lưu vào settings.json…
-                </span>
+                <span className="text-[var(--amber)] font-semibold">Đang lưu vào settings.json…</span>
               ) : lastSavedTime ? (
-                <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-600">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
-                  Đã lưu vào máy chủ ({lastSavedTime})
-                </span>
+                <span className="text-[var(--green)] font-semibold">Đã lưu máy chủ ({lastSavedTime})</span>
               ) : (
-                <span className="text-ink-faint">Sẵn sàng lưu</span>
+                <span className="text-[var(--text-faint)]">Sẵn sàng</span>
               )}
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <label className="block">
-                <span className="label-caps mb-1 block text-xs">🏢 Tên địa điểm / Cơ sở</span>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="form-label">Tên địa điểm / Cơ sở</label>
                 <input
                   id="voucher-location-name"
                   name="locationName"
-                  className="input-ghost w-full px-3 py-2 text-sm"
+                  className="form-input text-xs"
                   value={voucherSettings.locationName || ''}
                   onChange={(e) =>
                     setVoucherSettings({ ...voucherSettings, locationName: e.target.value })
                   }
                   placeholder="VD: Quán Cafe / Khách Sạn ABC"
                 />
-              </label>
+              </div>
 
-              <label className="block">
-                <span className="label-caps mb-1 block text-xs">📶 Tên sóng WiFi (SSID)</span>
+              <div>
+                <label className="form-label">Tên sóng WiFi (SSID)</label>
                 <input
                   id="voucher-ssid"
                   name="ssid"
-                  className="input-ghost w-full px-3 py-2 text-sm"
+                  className="form-input text-xs"
                   value={voucherSettings.ssid || ''}
                   onChange={(e) =>
                     setVoucherSettings({ ...voucherSettings, ssid: e.target.value })
                   }
-                  placeholder="VD: WIFI_HOTSPOT_FREE"
+                  placeholder="VD: WIFI_HOTSPOT"
                 />
-              </label>
+              </div>
             </div>
 
-            {/* Chọn tài khoản từ Router MikroTik */}
-            <div className="rounded-xl border border-primary/30 bg-primary-soft/30 p-3.5 space-y-3">
+            {/* Chọn user hotspot router */}
+            <div className="rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-2)] p-3 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="label-caps text-xs font-bold text-primary flex items-center gap-1.5">
-                  <span>⚡</span> Chọn tài khoản Hotspot từ Router (Tự động điền mật khẩu)
+                <span className="form-label mb-0 text-[10px] text-[var(--accent-bright)]">
+                  ⚡ Chọn tài khoản Hotspot từ Router (Tự động điền)
                 </span>
                 <button
                   type="button"
                   onClick={loadHotspotUsers}
                   disabled={loadingHotspotUsers}
-                  className="btn-ghost px-2 py-0.5 text-[11px] font-semibold text-primary"
-                  title="Tải lại danh sách người dùng từ MikroTik Router"
+                  className="btn btn-ghost btn-sm h-6 px-1.5 text-[10px]"
                 >
-                  {loadingHotspotUsers ? <Spinner size="sm" /> : '⟳'} Làm mới danh sách
+                  {loadingHotspotUsers ? <Spinner size="xs" /> : '⟳'} Tải lại
                 </button>
               </div>
 
@@ -783,13 +716,13 @@ export default function SettingsPage() {
                 id="select-hotspot-user"
                 aria-label="Chọn tài khoản Hotspot từ Router"
                 className="w-full"
-                buttonClassName="font-mono text-xs"
+                buttonClassName="font-mono text-xs h-8"
                 placeholder={
                   loadingHotspotUsers
-                    ? 'Đang tải danh sách tài khoản từ Router MikroTik…'
+                    ? 'Đang tải danh sách tài khoản…'
                     : hotspotUsers.length === 0
                     ? '-- Không có tài khoản nào trên Router --'
-                    : `-- Chọn tài khoản từ danh sách Router (${hotspotUsers.length} tài khoản) --`
+                    : `-- Chọn tài khoản từ danh sách Router (${hotspotUsers.length}) --`
                 }
                 searchable={hotspotUsers.length > 4}
                 value={
@@ -799,632 +732,330 @@ export default function SettingsPage() {
                 onChange={handleSelectHotspotUser}
                 options={hotspotUsers.map((u) => ({
                   value: u.name,
-                  label: u.name,
-                  sublabel: `Pass: ${u.password || '(Trống)'}${u.comment ? ` · ${u.comment}` : ''}`,
-                  badge: u.profile || '',
-                  icon: '👤',
+                  label: `${u.name} (Pass: ${u.password ? u.password : 'trống'})`,
+                  badge: u.profile || 'default',
                 }))}
               />
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 pt-1">
-                <label className="block">
-                  <span className="label-caps mb-1 block text-xs text-primary font-bold">👤 Tên tài khoản</span>
-                  <input
-                    id="voucher-sample-user"
-                    name="sampleUser"
-                    className="input-ghost w-full font-mono px-3 py-2 text-sm font-bold text-ink"
-                    value={voucherSettings.sampleUser || ''}
-                    onChange={(e) =>
-                      setVoucherSettings({ ...voucherSettings, sampleUser: e.target.value })
-                    }
-                    placeholder="VD: khach_vip88"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="label-caps mb-1 block text-xs text-primary font-bold">🔑 Mật khẩu (Tự động điền)</span>
-                  <input
-                    id="voucher-sample-password"
-                    name="samplePassword"
-                    className="input-ghost w-full font-mono px-3 py-2 text-sm font-bold text-ink"
-                    value={voucherSettings.samplePassword || ''}
-                    onChange={(e) =>
-                      setVoucherSettings({ ...voucherSettings, samplePassword: e.target.value })
-                    }
-                    placeholder="VD: 88889999"
-                  />
-                </label>
-              </div>
-
-              {/* Thông số tự động lấy theo User */}
-              <div className="grid grid-cols-2 gap-2 rounded-xl border border-primary/20 bg-white/70 p-2.5 text-xs shadow-sm">
-                <div className="flex flex-col">
-                  <span className="text-[11px] font-semibold text-ink-soft">⏱️ Thời hạn sử dụng:</span>
-                  <span className="font-bold text-ink">{userUptimeDisplay}</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[11px] font-semibold text-ink-soft">📊 Dung lượng giới hạn:</span>
-                  <span className="font-bold text-ink">{userBytesDisplay}</span>
-                </div>
-                {userProfileDisplay && (
-                  <div className="col-span-2 flex items-center justify-between border-t border-ink/10 pt-1.5 text-[11px]">
-                    <span className="text-ink-soft">📦 Gói hồ sơ (Profile):</span>
-                    <span className="rounded bg-primary-soft px-2 py-0.5 font-bold text-primary-deep">{userProfileDisplay}</span>
-                  </div>
-                )}
-              </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <label className="block">
-                <span className="label-caps mb-1 block text-xs">🌐 Địa chỉ trang đăng nhập (Portal)</span>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="form-label">Cổng đăng nhập (Login URL)</label>
                 <input
                   id="voucher-login-url"
                   name="loginUrl"
-                  className="input-ghost w-full px-3 py-2 text-sm font-mono text-xs"
+                  className="form-input text-xs"
                   value={voucherSettings.loginUrl || ''}
                   onChange={(e) =>
                     setVoucherSettings({ ...voucherSettings, loginUrl: e.target.value })
                   }
-                  placeholder="VD: http://192.168.20.1"
+                  placeholder="VD: http://192.168.88.1"
                 />
-              </label>
+              </div>
 
-              <label className="block">
-                <span className="label-caps mb-1 block text-xs">📞 Hotline hỗ trợ kỹ thuật</span>
+              <div>
+                <label className="form-label">Số Hotline hỗ trợ</label>
                 <input
                   id="voucher-hotline"
                   name="hotline"
-                  className="input-ghost w-full px-3 py-2 text-sm"
+                  className="form-input text-xs"
                   value={voucherSettings.hotline || ''}
                   onChange={(e) =>
                     setVoucherSettings({ ...voucherSettings, hotline: e.target.value })
                   }
-                  placeholder="VD: 0901 234 567"
+                  placeholder="VD: 0888 123 456"
                 />
-              </label>
+              </div>
             </div>
 
-            <label className="block">
-              <span className="label-caps mb-1 block text-xs">💬 Lời chào chân trang</span>
+            <div>
+              <label className="form-label">Dòng chữ chân trang (Footer)</label>
               <input
-                id="voucher-footer-text"
+                id="voucher-footer"
                 name="footerText"
-                className="input-ghost w-full px-3 py-2 text-sm"
+                className="form-input text-xs"
                 value={voucherSettings.footerText || ''}
                 onChange={(e) =>
                   setVoucherSettings({ ...voucherSettings, footerText: e.target.value })
                 }
-                placeholder="VD: Chúc quý khách trải nghiệm mạng tốc độ cao vui vẻ!"
+                placeholder="VD: Chúc quý khách truy cập mạng vui vẻ!"
               />
-            </label>
+            </div>
 
-            <div className="flex items-center justify-between gap-3 border-t border-white/50 pt-4">
-              <button
-                type="button"
-                onClick={handleResetVoucherSettings}
-                className="btn-ghost px-4 py-2 text-xs font-semibold text-ink-soft hover:text-ink"
-                title="Khôi phục cài đặt mẫu in về mặc định"
-              >
-                <span>↺</span> Khôi phục mặc định
-              </button>
+            <div className="flex gap-2 pt-2">
               <button
                 type="submit"
                 disabled={savingSettings}
-                className="btn-primary px-5 py-2 text-xs font-semibold"
+                className="btn btn-primary btn-sm"
               >
-                {savingSettings ? <Spinner size="sm" /> : '💾'} Lưu mẫu in thẻ (JSON)
+                {savingSettings ? 'Đang lưu…' : 'Lưu cấu hình ngay'}
+              </button>
+              <button
+                type="button"
+                onClick={printSampleCard}
+                className="btn btn-secondary btn-sm"
+              >
+                In thử 1 thẻ
               </button>
             </div>
           </form>
 
-          {/* Cột phải: Khung Xem trước thẻ in trực quan (Live Preview) (5 cột) */}
-          <div className="flex flex-col justify-between rounded-xl border border-primary/30 bg-gradient-to-br from-primary/5 via-white/40 to-secondary/5 p-4 shadow-sm lg:col-span-5">
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <span className="label-caps text-[11px] font-bold text-primary">
-                  👁️ Xem trước thẻ in thực tế
-                </span>
-                <span className="rounded bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                  Live Preview
-                </span>
-              </div>
-
-              {/* Thẻ mô phỏng */}
-              <div className="relative overflow-hidden rounded-xl border-2 border-dashed border-primary/60 bg-white/90 p-4 shadow-sm backdrop-blur">
-                <div className="flex items-center justify-between border-b border-ink/10 pb-2">
-                  <div className="text-xs font-extrabold uppercase tracking-wider text-primary">
-                    🏢 {voucherSettings.locationName || 'Quán Cafe / Khách Sạn'}
-                  </div>
-                  <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-bold text-primary-deep">
-                    VOUCHER
-                  </span>
-                </div>
-
-                <div className="mt-2.5 space-y-1.5 text-xs">
-                  <div className="flex items-center justify-between font-medium">
-                    <span className="text-ink-soft">📶 Sóng WiFi:</span>
-                    <span className="font-bold text-ink">{voucherSettings.ssid || 'WIFI_HOTSPOT'}</span>
-                  </div>
-
-                  {voucherSettings.loginUrl && (
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-ink-soft">🌐 Trang đăng nhập:</span>
-                      <span className="font-mono font-semibold text-tertiary">{voucherSettings.loginUrl}</span>
-                    </div>
-                  )}
-
-                  <div className="my-2 border-t border-dashed border-ink/15" />
-
-                  <div className="flex items-center justify-between rounded-lg bg-primary-soft/60 px-2.5 py-1.5">
-                    <span className="text-xs font-bold text-ink-soft">👤 Tài khoản:</span>
-                    <span className="font-mono text-sm font-extrabold text-primary-deep">
-                      {voucherSettings.sampleUser || 'khach'}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between rounded-lg bg-primary-soft/60 px-2.5 py-1.5">
-                    <span className="text-xs font-bold text-ink-soft">🔑 Mật khẩu:</span>
-                    <span className="font-mono text-sm font-extrabold text-primary-deep">
-                      {voucherSettings.samplePassword || 'khongchiase'}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-1 text-[11px] text-ink-soft">
-                    <span>⏱️ Thời hạn:</span>
-                    <span className="font-semibold text-ink">{userUptimeDisplay}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-[11px] text-ink-soft">
-                    <span>📊 Dung lượng:</span>
-                    <span className="font-semibold text-ink">{userBytesDisplay}</span>
-                  </div>
-
-                  {userProfileDisplay && (
-                    <div className="flex items-center justify-between text-[11px] text-ink-soft">
-                      <span>📦 Gói hồ sơ:</span>
-                      <span className="font-bold text-primary">{userProfileDisplay}</span>
-                    </div>
-                  )}
-
-                  {voucherSettings.hotline && (
-                    <div className="flex items-center justify-between pt-1 text-[11px]">
-                      <span className="text-ink-soft">📞 Hotline:</span>
-                      <span className="font-bold text-secondary">{voucherSettings.hotline}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-3 border-t border-dashed border-ink/10 pt-2 text-center text-[10px] italic text-ink-faint">
-                  {voucherSettings.footerText || 'Chúc quý khách trải nghiệm mạng tốc độ cao vui vẻ!'}
-                </div>
-              </div>
+          {/* Live Preview Card */}
+          <div className="lg:col-span-5 flex flex-col items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border-soft)] bg-[var(--surface-2)] p-5">
+            <div className="text-[11px] font-mono text-[var(--text-faint)] uppercase tracking-wider mb-3">
+              Xem trước mẫu in (Preview)
             </div>
 
-            <p className="mt-3 text-center text-[11px] text-ink-soft">
-              💡 Định dạng trên sẽ áp dụng tự động khi bạn bấm <b>In thẻ WiFi</b> tại trang Người dùng.
-            </p>
+            <div className="w-full max-w-[280px] rounded-[var(--radius-sm)] border border-dashed border-[var(--accent)] bg-[var(--surface)] p-4 shadow-sm font-sans space-y-2 text-xs">
+              {voucherSettings.locationName && (
+                <div className="font-mono font-bold uppercase tracking-wider text-[var(--accent-bright)] text-xs">
+                  🏢 {voucherSettings.locationName}
+                </div>
+              )}
+              <div className="font-semibold text-[var(--text)]">
+                📶 WiFi: <b>{voucherSettings.ssid || 'WIFI_HOTSPOT'}</b>
+              </div>
+              {voucherSettings.loginUrl && (
+                <div className="font-mono text-[10px] text-[var(--cyan)]">
+                  🌐 {voucherSettings.loginUrl}
+                </div>
+              )}
+              <div className="border-t border-[var(--border-soft)] my-1.5" />
+              <div className="flex justify-between font-mono">
+                <span className="text-[var(--text-faint)]">👤 Tài khoản:</span>
+                <span className="font-bold text-[var(--text)] bg-[var(--surface-2)] px-1 rounded">
+                  {voucherSettings.sampleUser || 'khach'}
+                </span>
+              </div>
+              <div className="flex justify-between font-mono">
+                <span className="text-[var(--text-faint)]">🔑 Mật khẩu:</span>
+                <span className="font-bold text-[var(--text)] bg-[var(--surface-2)] px-1 rounded">
+                  {voucherSettings.samplePassword || 'khongchiase'}
+                </span>
+              </div>
+              <div className="flex justify-between font-mono text-[11px]">
+                <span className="text-[var(--text-faint)]">⏱️ Thời hạn:</span>
+                <span>{userUptimeDisplay}</span>
+              </div>
+              <div className="flex justify-between font-mono text-[11px]">
+                <span className="text-[var(--text-faint)]">📊 Dung lượng:</span>
+                <span>{userBytesDisplay}</span>
+              </div>
+              {userProfileDisplay && (
+                <div className="flex justify-between font-mono text-[11px]">
+                  <span className="text-[var(--text-faint)]">📦 Gói hồ sơ:</span>
+                  <span>{userProfileDisplay}</span>
+                </div>
+              )}
+              {voucherSettings.hotline && (
+                <div className="font-mono text-[10px] text-[var(--accent-bright)] mt-1">
+                  📞 Hotline: {voucherSettings.hotline}
+                </div>
+              )}
+              {voucherSettings.footerText && (
+                <div className="border-t border-dashed border-[var(--border-soft)] pt-1.5 text-center text-[10px] text-[var(--text-faint)]">
+                  {voucherSettings.footerText}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </section>
 
-      {/* 3. Sao lưu & Xuất cấu hình Router (RouterOS Backup & Export) */}
-      <section className="glass rounded-2xl p-6 shadow-sm">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-white/40 pb-3">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-[0_0_16px_rgba(16,185,129,0.35)]">
-              💾
-            </span>
-            <div>
-              <h2 className="text-base font-bold text-ink">Sao lưu & Xuất Cấu hình Router (Backup & Export)</h2>
-              <p className="text-xs text-ink-faint">
-                Tạo bản sao lưu toàn diện hoặc xuất tập lệnh cấu hình script (.rsc) để lưu trữ an toàn trên máy tính của bạn
-              </p>
-            </div>
+      {/* 3. Quản lý Sao lưu & Xuất cấu hình RouterOS (.rsc & .backup) */}
+      <section className="sk-card">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-soft)] pb-3">
+          <div>
+            <h2 className="text-base font-bold text-[var(--text)]">Sao lưu & Xuất cấu hình RouterOS (.backup / .rsc)</h2>
+            <p className="font-mono text-xs text-[var(--text-faint)]">
+              Tạo và tải về file cấu hình script RouterOS dạng văn bản (.rsc) hoặc file nhị phân (.backup)
+            </p>
           </div>
           <button
-            type="button"
             onClick={loadRouterBackups}
             disabled={loadingBackups}
-            className="btn-ghost px-3.5 py-1.5 text-xs font-semibold"
-            title="Làm mới danh sách file sao lưu từ Router"
+            className="btn btn-secondary btn-sm"
           >
-            {loadingBackups ? <Spinner size="sm" /> : '⟳'} Làm mới danh sách
+            {loadingBackups ? <Spinner size="xs" /> : '⟳'} Làm mới danh sách
           </button>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          {/* Cột trái: Form cấu hình & Tạo bản sao lưu (5 cột) */}
-          <form onSubmit={handleCreateBackup} className="space-y-4 lg:col-span-5">
-            <div className="rounded-xl border border-primary/20 bg-white/40 p-4 space-y-3.5">
-              <span className="label-caps text-xs font-bold text-primary block">
-                ⚙️ Chọn Phương thức Sao lưu:
-              </span>
+        {/* Form tạo sao lưu */}
+        <form onSubmit={handleCreateBackup} className="rounded-[var(--radius-sm)] border border-[var(--border-soft)] bg-[var(--surface-2)] p-4 space-y-3 mb-5">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex-1 min-w-[200px]">
+              <label className="form-label">Tên file sao lưu</label>
+              <input
+                value={backupForm.name}
+                onChange={(e) => setBackupForm({ ...backupForm, name: e.target.value })}
+                className="form-input text-xs"
+                placeholder="vd: mikrotik_backup_2026"
+              />
+            </div>
 
-              {/* Lựa chọn Type 1: RSC Script */}
-              <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
-                backupForm.type === 'rsc'
-                  ? 'border-emerald-500/60 bg-emerald-500/10 shadow-sm'
-                  : 'border-white/50 bg-white/30 hover:bg-white/50'
-              }`}>
-                <input
-                  type="radio"
-                  name="backupType"
-                  value="rsc"
-                  checked={backupForm.type === 'rsc'}
-                  onChange={() => setBackupForm({ ...backupForm, type: 'rsc' })}
-                  className="mt-1"
-                />
-                <div>
-                  <div className="text-xs font-bold text-ink flex items-center gap-1.5">
-                    <span>📄 Xuất Tập lệnh Cấu hình (.rsc)</span>
-                    <span className="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[10px] font-bold text-emerald-600">Khuyên dùng</span>
-                  </div>
-                  <p className="mt-0.5 text-[11px] text-ink-soft">
-                    Tập lệnh CLI dạng văn bản. Tự động tải về máy tính cá nhân, có thể xem trước và khôi phục trên mọi dòng router MikroTik.
-                  </p>
-                </div>
-              </label>
+            <div className="w-48">
+              <label className="form-label">Định dạng xuất</label>
+              <div className="sk-seg w-full">
+                <button
+                  type="button"
+                  onClick={() => setBackupForm({ ...backupForm, type: 'rsc' })}
+                  className={`sk-seg__btn flex-1 justify-center ${backupForm.type === 'rsc' ? 'is-on' : ''}`}
+                >
+                  Script (.rsc)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBackupForm({ ...backupForm, type: 'backup' })}
+                  className={`sk-seg__btn flex-1 justify-center ${backupForm.type === 'backup' ? 'is-on' : ''}`}
+                >
+                  Binary (.backup)
+                </button>
+              </div>
+            </div>
 
-              {/* Lựa chọn Type 2: Binary Backup */}
-              <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
-                backupForm.type === 'backup'
-                  ? 'border-primary/60 bg-primary/10 shadow-sm'
-                  : 'border-white/50 bg-white/30 hover:bg-white/50'
-              }`}>
-                <input
-                  type="radio"
-                  name="backupType"
-                  value="backup"
-                  checked={backupForm.type === 'backup'}
-                  onChange={() => setBackupForm({ ...backupForm, type: 'backup' })}
-                  className="mt-1"
-                />
-                <div>
-                  <div className="text-xs font-bold text-ink">
-                    📦 Bản sao lưu Nhị phân Hệ thống (.backup)
-                  </div>
-                  <p className="mt-0.5 text-[11px] text-ink-soft">
-                    Bản sao lưu nhị phân đầy đủ RouterOS (gồm cấu hình, chứng chỉ, mật khẩu). Lưu trên bộ nhớ Router để khôi phục nhanh.
-                  </p>
-                </div>
-              </label>
-
-              {/* Tên file sao lưu */}
-              <label className="block pt-1">
-                <span className="label-caps mb-1 block text-xs">📝 Tên file sao lưu</span>
-                <input
-                  id="backup-file-name"
-                  name="backupFileName"
-                  className="input-ghost w-full font-mono px-3 py-2 text-xs font-bold text-ink"
-                  value={backupForm.name}
-                  onChange={(e) => setBackupForm({ ...backupForm, name: e.target.value })}
-                  placeholder="vd: mikrotik_backup_2026"
-                />
-              </label>
-
-              {/* Tùy chọn chi tiết theo loại */}
-              {backupForm.type === 'rsc' ? (
-                <div className="space-y-2 pt-1 border-t border-ink/10 text-xs">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={backupForm.showSensitive}
-                      onChange={(e) => setBackupForm({ ...backupForm, showSensitive: e.target.checked })}
-                      className="rounded"
-                    />
-                    <span className="text-ink-soft font-medium">Bao gồm mật khẩu nhạy cảm (show-sensitive)</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={backupForm.compact}
-                      onChange={(e) => setBackupForm({ ...backupForm, compact: e.target.checked })}
-                      className="rounded"
-                    />
-                    <span className="text-ink-soft font-medium">Chỉ xuất cấu hình tùy biến (compact)</span>
-                  </label>
-                </div>
-              ) : (
-                <div className="space-y-2 pt-1 border-t border-ink/10 text-xs">
-                  <label className="block">
-                    <span className="label-caps mb-1 block text-[11px]">Mật khẩu mã hóa bảo vệ (Tùy chọn)</span>
-                    <input
-                      type="password"
-                      className="input-ghost w-full px-3 py-1.5 text-xs font-mono"
-                      value={backupForm.password}
-                      onChange={(e) => setBackupForm({ ...backupForm, password: e.target.value })}
-                      placeholder="Để trống nếu không đặt mật khẩu"
-                    />
-                  </label>
-                </div>
-              )}
-
+            <div className="self-end">
               <button
                 type="submit"
                 disabled={backupBusy}
-                className="btn-primary w-full justify-center py-2.5 text-xs font-bold shadow-md"
+                className="btn btn-primary btn-sm h-9"
               >
-                {backupBusy ? (
-                  <>
-                    <Spinner size="sm" />
-                    <span>Đang xử lý sao lưu RouterOS…</span>
-                  </>
-                ) : backupForm.type === 'rsc' ? (
-                  '💾 Xuất & Tải về Máy tính (.rsc)'
-                ) : (
-                  '💾 Tạo & Tải về Máy tính (.backup)'
-                )}
+                {backupBusy ? 'Đang xuất…' : backupForm.type === 'rsc' ? '⬇ Xuất file .rsc' : '⬇ Tạo file .backup'}
               </button>
             </div>
-          </form>
+          </div>
 
-          {/* Cột phải: Danh sách các bản sao lưu đang lưu trên Router (7 cột) */}
-          <div className="flex flex-col justify-between rounded-xl border border-white/50 bg-white/30 p-4 lg:col-span-7">
-            <div>
-              <div className="mb-3 flex items-center justify-between">
-                <span className="label-caps text-xs font-bold text-ink">
-                  📁 Danh sách File Sao lưu trên Router ({routerBackups.length})
-                </span>
-                <span className="text-[11px] text-ink-faint">Đồng bộ từ /file</span>
-              </div>
+          <div className="flex flex-wrap items-center gap-4 text-xs text-[var(--text-dim)] pt-1 font-mono">
+            {backupForm.type === 'rsc' ? (
+              <>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={backupForm.showSensitive}
+                    onChange={(e) => setBackupForm({ ...backupForm, showSensitive: e.target.checked })}
+                  />
+                  <span>Bao gồm mật khẩu / thông tin nhạy cảm (show-sensitive)</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={backupForm.compact}
+                    onChange={(e) => setBackupForm({ ...backupForm, compact: e.target.checked })}
+                  />
+                  <span>Nén gọn chỉ cấu hình tùy chỉnh (compact)</span>
+                </label>
+              </>
+            ) : (
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={backupForm.dontEncrypt}
+                  onChange={(e) => setBackupForm({ ...backupForm, dontEncrypt: e.target.checked })}
+                />
+                <span>Không mã hóa file nhị phân (dont-encrypt)</span>
+              </label>
+            )}
+          </div>
+        </form>
 
-              {loadingBackups ? (
-                <div className="py-8 text-center">
-                  <Spinner label="Đang tải danh sách file sao lưu từ Router…" />
-                </div>
-              ) : routerBackups.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-ink/20 py-8 text-center text-xs text-ink-faint">
-                  Chưa có bản sao lưu nào trên Router. Bạn có thể bấm nút tạo bên cạnh để xuất cấu hình ngay.
-                </div>
+        {/* Bảng danh sách file sao lưu */}
+        <div className="overflow-x-auto">
+          <table className="sk-dtable">
+            <thead>
+              <tr>
+                <th>Tên file trên Router</th>
+                <th>Loại file</th>
+                <th>Dung lượng</th>
+                <th>Thời gian tạo</th>
+                <th className="text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {routerBackups.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center font-mono text-xs text-[var(--text-faint)]">
+                    Chưa có file sao lưu nào trên Router. Hãy nhấn nút xuất file ở trên.
+                  </td>
+                </tr>
               ) : (
-                <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
-                  {routerBackups.map((f) => (
-                    <div
-                      key={f.id || f.name}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/60 bg-white/60 p-3 shadow-xs transition hover:bg-white"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm ${
-                          f.type === 'rsc' ? 'bg-emerald-500/15 text-emerald-600' : 'bg-primary/15 text-primary'
-                        }`}>
-                          {f.type === 'rsc' ? '📄' : '📦'}
-                        </span>
-                        <div className="min-w-0">
-                          <div className="truncate font-mono text-xs font-bold text-ink" title={f.name}>
-                            {f.name}
-                          </div>
-                          <div className="text-[10px] text-ink-faint">
-                            {formatBytes(f.size)} · {f.lastModified || '—'}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {f.type === 'rsc' && f.contents && (
+                routerBackups.map((file) => (
+                  <tr key={file.id || file.name}>
+                    <td className="font-mono font-semibold">{file.name}</td>
+                    <td>
+                      <span className={`sk-state text-[10px] ${file.type === 'rsc' ? 'sk-state--accent' : 'sk-state--cyan'}`}>
+                        {file.type ? file.type.toUpperCase() : 'FILE'}
+                      </span>
+                    </td>
+                    <td className="font-mono text-xs text-[var(--text-dim)]">{formatBytes(file.size)}</td>
+                    <td className="font-mono text-xs text-[var(--text-faint)]">{file.creationTime || '—'}</td>
+                    <td className="text-right">
+                      <div className="flex items-center justify-end gap-1.5 font-mono text-xs">
+                        {file.type === 'rsc' && file.contents && (
                           <button
                             type="button"
-                            onClick={() => handlePreviewFile(f)}
-                            className="btn-ghost px-2 py-1 text-[11px] font-semibold text-primary"
-                            title="Xem trước nội dung script"
+                            onClick={() => handlePreviewFile(file)}
+                            className="btn btn-secondary btn-sm h-7 px-2 text-[11px]"
                           >
-                            👁️ Xem
+                            👁 Xem script
                           </button>
                         )}
                         <button
                           type="button"
-                          onClick={() => handleDownloadExistingFile(f)}
-                          className="btn-ghost px-2 py-1 text-[11px] font-semibold text-emerald-600"
-                          title="Tải file về máy tính của bạn"
+                          onClick={() => handleDownloadExistingFile(file)}
+                          className="btn btn-primary btn-sm h-7 px-2 text-[11px]"
                         >
-                          ⬇️ Tải về
+                          ⬇ Tải về
                         </button>
-                        {isAdmin && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteRouterBackup(f)}
-                            disabled={deletingBackupId === f.id}
-                            className="rounded-lg px-2 py-1 text-[11px] font-semibold text-rose-500 hover:bg-rose-50 disabled:opacity-50 transition"
-                            title="Xóa file khỏi Router"
-                          >
-                            {deletingBackupId === f.id ? '…' : '🗑️'}
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteRouterBackup(file)}
+                          disabled={deletingBackupId === file.id}
+                          className="btn btn-ghost btn-sm h-7 px-2 text-[11px] text-[var(--red)] hover:bg-[var(--red-bg)]"
+                        >
+                          {deletingBackupId === file.id ? '…' : 'Xóa'}
+                        </button>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    </td>
+                  </tr>
+                ))
               )}
-            </div>
-
-            <div className="mt-3 rounded-lg bg-primary-soft/40 p-2.5 text-[11px] text-ink-soft">
-              💡 <b>Lưu ý:</b> File <code>.rsc</code> có thể mở trực tiếp bằng Notepad/VSCode hoặc nạp lại vào MikroTik qua lệnh <code>/import file={'{ten_file}'}.rsc</code>.
-            </div>
-          </div>
+            </tbody>
+          </table>
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* 1. Trạng thái & Kết nối MikroTik Router */}
-        <section className="glass rounded-2xl p-6 shadow-sm">
-          <div className="mb-4 flex items-center justify-between border-b border-white/40 pb-3">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
-                🖥️
-              </span>
-              <div>
-                <h2 className="text-base font-bold text-ink">Kết nối MikroTik Router</h2>
-                <p className="text-xs text-ink-faint">RouterOS 7 REST API Endpoint</p>
-              </div>
-            </div>
-            {healthData?.connected ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1 text-xs font-semibold text-primary">
-                <span className="neon-dot h-2 w-2" />
-                Đang kết nối ({healthData.latencyMs}ms)
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-danger-soft px-3 py-1 text-xs font-semibold text-danger">
-                <span className="h-2 w-2 rounded-full bg-danger" />
-                Mất kết nối
-              </span>
-            )}
+      {/* 4. Lệnh CLI WinBox */}
+      <section className="sk-card">
+        <div className="mb-3 flex items-center justify-between border-b border-[var(--border-soft)] pb-3">
+          <div>
+            <h2 className="text-sm font-bold text-[var(--text)]">Lệnh Cấu hình RouterOS REST API (Terminal CLI)</h2>
+            <p className="font-mono text-xs text-[var(--text-faint)]">
+              Chạy các lệnh sau trong WinBox New Terminal nếu router chưa bật REST
+            </p>
           </div>
+          <button
+            onClick={copyCliScript}
+            className="btn btn-secondary btn-sm font-mono text-xs"
+          >
+            {copiedScript ? '✓ Đã sao chép' : '📋 Sao chép lệnh CLI'}
+          </button>
+        </div>
 
-          <div className="space-y-3 text-sm">
-            <div className="flex items-center justify-between rounded-xl bg-white/40 px-3.5 py-2.5">
-              <span className="text-xs font-medium text-ink-soft">Địa chỉ Host Router:</span>
-              <span className="font-mono text-xs font-semibold text-ink">
-                {healthData?.mikrotik?.host || '192.168.20.1'}
-              </span>
-            </div>
+        <pre className="overflow-x-auto rounded-[var(--radius-sm)] border border-[var(--border-soft)] bg-[var(--bg-code)] p-3.5 font-mono text-xs text-[var(--text-code)] leading-relaxed">
+          {routerCliScript}
+        </pre>
+      </section>
 
-            <div className="flex items-center justify-between rounded-xl bg-white/40 px-3.5 py-2.5">
-              <span className="text-xs font-medium text-ink-soft">REST Base URL:</span>
-              <span className="font-mono text-xs font-semibold text-ink">
-                {healthData?.mikrotik?.restBase || 'http://192.168.20.1:80/rest'}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between rounded-xl bg-white/40 px-3.5 py-2.5">
-              <span className="text-xs font-medium text-ink-soft">Tài khoản REST API:</span>
-              <span className="font-mono text-xs font-semibold text-ink">
-                {healthData?.mikrotik?.user || 'user_api'}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between rounded-xl bg-white/40 px-3.5 py-2.5">
-              <span className="text-xs font-medium text-ink-soft">Xác thực Dashboard:</span>
-              <span className="text-xs font-semibold text-primary">
-                Trực tiếp MikroTik RouterOS (/user)
-              </span>
-            </div>
-          </div>
-
-          {/* Lệnh bật REST API */}
-          <div className="mt-5 rounded-xl border border-white/60 bg-ink/5 p-3.5">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="label-caps text-[11px] text-ink-soft">
-                Lệnh cấu hình MikroTik WinBox CLI:
-              </span>
-              <button
-                onClick={copyCliScript}
-                className="text-xs font-semibold text-primary hover:underline"
-              >
-                {copiedScript ? '✓ Đã chép' : 'Sao chép'}
-              </button>
-            </div>
-            <pre className="overflow-x-auto rounded-lg bg-ink/80 p-2.5 font-mono text-[11px] leading-relaxed text-cyan-300">
-              {routerCliScript}
-            </pre>
-          </div>
-        </section>
-
-        {/* 3. Tài khoản Quản trị & Bảo mật */}
-        <section className="glass rounded-2xl p-6 shadow-sm">
-          <div className="mb-4 flex items-center gap-2.5 border-b border-white/40 pb-3">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-tertiary/15 text-tertiary">
-              🔒
-            </span>
-            <div>
-              <h2 className="text-base font-bold text-ink">Bảo mật & Tài khoản hiện tại</h2>
-              <p className="text-xs text-ink-faint">Thông tin phiên đăng nhập đang hoạt động</p>
-            </div>
-          </div>
-
-          <div className="space-y-3.5 text-sm">
-            <div className="rounded-xl bg-white/40 p-3.5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-semibold text-ink">{fullName || user || 'admin'}</div>
-                  <div className="font-mono text-xs text-ink-soft">Tên đăng nhập: {user}</div>
-                </div>
-                <span
-                  className={`rounded-lg px-2.5 py-1 text-xs font-bold ${
-                    role === 'admin'
-                      ? 'bg-primary/15 text-primary'
-                      : role === 'operator'
-                      ? 'bg-warning/15 text-warning'
-                      : 'bg-tertiary/15 text-tertiary'
-                  }`}
-                >
-                  {role === 'admin'
-                    ? 'Quản trị viên'
-                    : role === 'operator'
-                    ? 'Nhân viên'
-                    : 'Giám sát'}
-                </span>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-primary/20 bg-primary-soft/20 p-3.5 text-xs text-ink-soft">
-              <span className="font-bold text-primary">💡 Quyền hạn của bạn:</span>{' '}
-              {role === 'admin'
-                ? 'Bạn có toàn quyền quản trị router, thay đổi cấu hình, cấp voucher và quản lý danh sách tài khoản.'
-                : role === 'operator'
-                ? 'Bạn có quyền tạo người dùng hotspot, gia hạn thời gian, in thẻ WiFi voucher và ngắt phiên kết nối.'
-                : 'Bạn đang ở chế độ Giám sát (Chỉ xem) dữ liệu, không thể thực hiện các thao tác thêm, sửa, xóa.'}
-            </div>
-          </div>
-        </section>
-
-        {/* 4. Thông tin Phiên bản & Hệ thống */}
-        <section className="glass col-span-1 lg:col-span-2 rounded-2xl p-6 shadow-sm">
-          <div className="mb-4 flex items-center gap-2.5 border-b border-white/40 pb-3">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
-              ℹ️
-            </span>
-            <div>
-              <h2 className="text-base font-bold text-ink">Thông tin Hệ thống</h2>
-              <p className="text-xs text-ink-faint">Phiên bản & Công nghệ phát triển</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-xs">
-            <div className="rounded-xl bg-white/40 p-3">
-              <div className="text-ink-faint">Giao diện (Frontend)</div>
-              <div className="mt-1 font-bold text-ink">React 19 · Vite 8</div>
-            </div>
-            <div className="rounded-xl bg-white/40 p-3">
-              <div className="text-ink-faint">Thiết kế (Design)</div>
-              <div className="mt-1 font-bold text-primary">Neon Glass Light</div>
-            </div>
-            <div className="rounded-xl bg-white/40 p-3">
-              <div className="text-ink-faint">Máy chủ Proxy & RBAC</div>
-              <div className="mt-1 font-bold text-ink">Express 5 · 3 Cấp Quyền</div>
-            </div>
-            <div className="rounded-xl bg-white/40 p-3">
-              <div className="text-ink-faint">Giao thức Realtime</div>
-              <div className="mt-1 font-bold text-ink">Server-Sent Events (SSE)</div>
-            </div>
-          </div>
-
-          <div className="mt-4 flex items-center justify-between rounded-xl bg-white/40 px-3.5 py-2.5 text-xs text-ink-soft">
-            <span>Tương thích MikroTik:</span>
-            <span className="font-semibold text-primary">RouterOS 7.x (REST API)</span>
-          </div>
-        </section>
-      </div>
-
-      {/* Modal Thêm / Sửa tài khoản MikroTik RouterOS */}
+      {/* Modal Quản lý User */}
       <Modal
         open={userModalOpen}
-        title={editingUser ? `Sửa tài khoản MikroTik "${editingUser.username}"` : 'Thêm tài khoản MikroTik RouterOS mới'}
+        title={editingUser ? `Sửa tài khoản "${editingUser.username}"` : 'Tạo tài khoản MikroTik mới'}
         onClose={() => setUserModalOpen(false)}
         footer={
           <>
-            <button
-              type="button"
-              onClick={() => setUserModalOpen(false)}
-              className="btn-ghost px-4 py-2 text-sm"
-            >
+            <button onClick={() => setUserModalOpen(false)} className="btn btn-secondary btn-sm">
               Hủy
             </button>
-            <button
-              onClick={handleSaveUser}
-              disabled={userFormBusy}
-              className="btn-primary px-4 py-2 text-sm disabled:opacity-50"
-            >
+            <button onClick={handleSaveUser} disabled={userFormBusy} className="btn btn-primary btn-sm">
               {userFormBusy ? 'Đang lưu…' : editingUser ? 'Cập nhật' : 'Tạo tài khoản'}
             </button>
           </>
@@ -1432,137 +1063,93 @@ export default function SettingsPage() {
       >
         <form onSubmit={handleSaveUser} className="space-y-4">
           {userFormError && (
-            <div className="rounded-xl bg-danger-soft px-4 py-2.5 text-sm font-medium text-danger">
+            <div className="rounded-[var(--radius-sm)] bg-[var(--red-bg)] border border-[rgba(251,111,111,0.3)] p-2.5 text-xs font-medium text-[var(--red)]">
               {userFormError}
             </div>
           )}
 
-          <label className="block">
-            <span className="label-caps mb-1.5 block text-xs">Tên đăng nhập *</span>
+          <div>
+            <label className="form-label">Tên tài khoản *</label>
             <input
-              id="admin-user-username"
-              name="adminUsername"
-              className="input-underline w-full px-3 py-2 text-sm"
+              className="form-input"
               value={userForm.username}
               onChange={(e) => setUserForm({ ...userForm, username: e.target.value })}
-              placeholder="vd: le_tan_01"
+              placeholder="vd: operator1"
+              autoFocus
               disabled={!!editingUser}
-              autoFocus={!editingUser}
             />
-          </label>
-
-          <label className="block">
-            <span className="label-caps mb-1.5 block text-xs">
-              {editingUser ? 'Mật khẩu mới (Để trống nếu không đổi)' : 'Mật khẩu *'}
-            </span>
-            <input
-              id="admin-user-password"
-              name="adminPassword"
-              type="password"
-              className="input-underline w-full px-3 py-2 text-sm"
-              value={userForm.password}
-              onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
-              placeholder={editingUser ? '••••••••' : 'Nhập mật khẩu'}
-            />
-          </label>
-
-          <label className="block">
-            <span className="label-caps mb-1.5 block text-xs">Ghi chú / Tên hiển thị</span>
-            <input
-              id="admin-user-fullname"
-              name="adminFullName"
-              className="input-underline w-full px-3 py-2 text-sm"
-              value={userForm.fullName}
-              onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })}
-              placeholder="vd: Nguyễn Văn A (Lễ tân)"
-            />
-          </label>
+          </div>
 
           <div>
-            <span className="label-caps mb-1.5 block text-xs">Nhóm quyền MikroTik (Group) *</span>
+            <label className="form-label">
+              Mật khẩu {editingUser ? '(để trống nếu không muốn đổi)' : '*'}
+            </label>
+            <input
+              type="password"
+              className="form-input"
+              value={userForm.password}
+              onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+              placeholder="••••••••"
+            />
+          </div>
+
+          <div>
+            <label className="form-label">Họ và tên / Ghi chú</label>
+            <input
+              className="form-input"
+              value={userForm.fullName}
+              onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })}
+              placeholder="vd: Nguyễn Văn A (Nhân viên lễ tân)"
+            />
+          </div>
+
+          <div>
+            <label className="form-label">Nhóm quyền RouterOS (Group)</label>
             <CustomSelect
-              id="admin-user-group"
-              name="adminGroup"
               className="w-full"
               value={userForm.group}
               onChange={(e) => setUserForm({ ...userForm, group: e.target.value })}
               options={[
-                {
-                  value: 'full',
-                  label: 'full — Quản trị viên cao cấp',
-                  sublabel: 'Toàn quyền quản trị RouterOS & Quản trị Dashboard',
-                  icon: '👑',
-                  badge: 'Toàn quyền',
-                },
-                {
-                  value: 'write',
-                  label: 'write — Nhân viên vận hành',
-                  sublabel: 'Cấp voucher, gia hạn thời gian, ngắt kết nối phiên',
-                  icon: '✍️',
-                  badge: 'Vận hành',
-                },
-                {
-                  value: 'read',
-                  label: 'read — Giám sát viên',
-                  sublabel: 'Chỉ xem số liệu thống kê, không được phép chỉnh sửa',
-                  icon: '👁️',
-                  badge: 'Chỉ xem',
-                },
+                { value: 'write', label: 'write — Nhân viên vận hành (Cấp phát, gia hạn voucher)' },
+                { value: 'full', label: 'full — Quản trị viên cao cấp (Toàn quyền hệ thống)' },
+                { value: 'read', label: 'read — Giám sát viên (Chỉ xem thống kê)' },
               ]}
             />
           </div>
         </form>
       </Modal>
 
-      {/* Modal Xem trước nội dung Tập lệnh Script (.rsc) */}
+      {/* Modal Xem trước Script .rsc */}
       <Modal
         open={previewModalOpen}
-        title={`📄 Nội dung Tập lệnh Cấu hình: ${previewData.filename}`}
+        title={`Xem cấu hình Script: ${previewData.filename}`}
+        maxWidth="max-w-3xl"
         onClose={() => setPreviewModalOpen(false)}
         footer={
-          <div className="flex items-center justify-between w-full">
+          <>
             <button
-              type="button"
               onClick={() => {
                 navigator.clipboard.writeText(previewData.contents);
                 setCopiedPreview(true);
-                toast.info('Đã sao chép toàn bộ mã script vào bộ nhớ tạm!', 'Đã sao chép');
-                setTimeout(() => setCopiedPreview(false), 2500);
+                toast.info('Đã sao chép toàn bộ script vào bộ nhớ tạm!', 'Đã sao chép');
+                setTimeout(() => setCopiedPreview(false), 3000);
               }}
-              className="btn-ghost px-3.5 py-2 text-xs font-semibold text-primary"
+              className="btn btn-secondary btn-sm"
             >
-              {copiedPreview ? '✓ Đã sao chép' : '📋 Sao chép mã'}
+              {copiedPreview ? '✓ Đã sao chép' : '📋 Sao chép Script'}
             </button>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setPreviewModalOpen(false)}
-                className="btn-ghost px-4 py-2 text-xs font-semibold"
-              >
-                Đóng
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  downloadTextFile(previewData.filename, previewData.contents);
-                  toast.success(`Đã tải file "${previewData.filename}" về máy tính!`, 'Tải về thành công');
-                }}
-                className="btn-primary px-4 py-2 text-xs font-semibold"
-              >
-                ⬇️ Tải về máy tính (.rsc)
-              </button>
-            </div>
-          </div>
+            <button
+              onClick={() => downloadTextFile(previewData.filename, previewData.contents)}
+              className="btn btn-primary btn-sm"
+            >
+              ⬇ Tải file về
+            </button>
+          </>
         }
       >
-        <div className="space-y-2">
-          <p className="text-xs text-ink-soft">
-            Dưới đây là toàn bộ mã lệnh cấu hình RouterOS dạng văn bản có thể nhập trực tiếp vào terminal WinBox:
-          </p>
-          <pre className="max-h-96 overflow-auto rounded-xl bg-ink/90 p-3.5 font-mono text-xs leading-relaxed text-cyan-300 select-all border border-white/20">
-            {previewData.contents || '# Không có nội dung.'}
-          </pre>
-        </div>
+        <pre className="max-h-[60vh] overflow-y-auto rounded-[var(--radius-sm)] border border-[var(--border-soft)] bg-[var(--bg-code)] p-4 font-mono text-xs text-[var(--text-code)] leading-relaxed">
+          {previewData.contents}
+        </pre>
       </Modal>
     </div>
   );

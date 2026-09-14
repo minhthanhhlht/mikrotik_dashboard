@@ -29,16 +29,12 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center">
-      {/* Ambient orbs */}
-      <div className="orb orb-cyan" />
-      <div className="orb orb-magenta" />
-      <div className="orb orb-violet" />
-
-      <div className="glass glass-glow relative z-10 w-full max-w-sm rounded-2xl p-8">
-        <div className="mb-8 flex flex-col items-center gap-3">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-[#00a2ff] text-white shadow-[0_0_26px_rgba(0,132,255,0.6)]">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-7 w-7">
+    <div className="min-h-screen flex items-center justify-center bg-[var(--bg-body)] bg-grid p-4 text-[var(--text)]">
+      <div className="w-full max-w-sm rounded-[var(--radius-lg)] border border-[var(--border-strong)] bg-[var(--surface)] p-8 shadow-[var(--shadow-lg)]">
+        {/* Brand Header */}
+        <div className="mb-6 flex flex-col items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-[var(--radius)] bg-[var(--accent)] text-white shadow-[0_0_20px_var(--accent-glow)]">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
               <rect x="3" y="8" width="18" height="8" rx="2" />
               <circle cx="6.5" cy="12" r="0.6" fill="currentColor" stroke="none" />
               <circle cx="9" cy="12" r="0.6" fill="currentColor" stroke="none" />
@@ -47,56 +43,65 @@ export default function LoginPage() {
             </svg>
           </div>
           <div className="text-center">
-            <h1 className="text-xl font-bold tracking-tight text-ink">
-              Hotspot Admin
+            <h1 className="text-xl font-bold tracking-tight text-[var(--text)]">
+              Hotspot & Infra Console
             </h1>
-            <p className="label-caps mt-1">MikroTik · Đăng nhập quản trị</p>
+            <p className="font-mono text-[11px] text-[var(--text-faint)] uppercase tracking-wider mt-0.5">
+              MikroTik RouterOS 7 · REST Interface
+            </p>
           </div>
         </div>
 
+        {/* Form Login */}
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="rounded-xl bg-danger-soft px-4 py-2.5 text-sm font-medium text-danger">
+            <div className="rounded-[var(--radius-sm)] bg-[var(--red-bg)] border border-[rgba(251,111,111,0.3)] p-3 text-xs font-medium text-[var(--red)]">
               {error}
             </div>
           )}
 
-          <label className="block">
-            <span className="label-caps mb-1.5 block">Tài khoản</span>
+          <div>
+            <label className="form-label">Tài khoản</label>
             <input
               id="login-username"
               name="username"
-              className="input-ghost"
+              className="form-input"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="vd: admin"
               autoFocus
               autoComplete="username"
             />
-          </label>
+          </div>
 
-          <label className="block">
-            <span className="label-caps mb-1.5 block">Mật khẩu</span>
+          <div>
+            <label className="form-label">Mật khẩu</label>
             <input
               id="login-password"
               name="password"
               type="password"
-              className="input-ghost"
+              className="form-input"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               autoComplete="current-password"
             />
-          </label>
+          </div>
 
-          <button type="submit" disabled={busy} className="btn-primary mt-2 w-full justify-center px-4 py-2.5 text-sm disabled:opacity-50">
-            {busy ? 'Đang đăng nhập…' : 'Đăng nhập'}
+          <button
+            type="submit"
+            disabled={busy}
+            className="btn btn-primary w-full mt-2 h-10 font-semibold"
+          >
+            {busy ? 'Đang đăng nhập…' : 'Đăng nhập vào hệ thống'}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-xs text-ink-faint">
-          RouterOS 7 · REST API · Neon Glass Light
-        </p>
+        <div className="mt-6 border-t border-[var(--border-soft)] pt-4 text-center">
+          <p className="font-mono text-[11px] text-[var(--text-faint)]">
+            ServerKit Infra Console Architecture v1.0
+          </p>
+        </div>
       </div>
     </div>
   );

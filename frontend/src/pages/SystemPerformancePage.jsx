@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { useEventSource } from '../hooks/useEventSource.jsx';
 import Spinner from '../components/Spinner.jsx';
 import { formatBytes, formatDuration } from '../utils/format.js';
 
-// Format tốc độ mạng theo bps -> bps, Kbps, Mbps, Gbps
 function formatSpeed(bps) {
   const num = Number(bps || 0);
   if (!Number.isFinite(num) || num <= 0) return '0 bps';
@@ -14,7 +13,6 @@ function formatSpeed(bps) {
   return `${(num / 1000000000).toFixed(2)} Gbps`;
 }
 
-// Format dung lượng bytes
 function formatStorageBytes(bytes) {
   const num = Number(bytes || 0);
   if (!Number.isFinite(num) || num <= 0) return '0 B';
@@ -28,35 +26,33 @@ function formatStorageBytes(bytes) {
   return `${val.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
-const MAX_HISTORY_POINTS = 30; // 30 điểm dữ liệu thời gian thực
+const MAX_HISTORY_POINTS = 30;
 
 export default function SystemPerformancePage() {
   const [liveData, setLiveData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isPaused, setIsPaused] = useState(false);
-  const [refreshInterval, setRefreshInterval] = useState(1500); // ms
-  const [history, setHistory] = useState([]); // { time, cpu, ram, rxRate, txRate }
+  const [refreshInterval, setRefreshInterval] = useState(1500);
+  const [history, setHistory] = useState([]);
 
-  // Kết nối Server-Sent Events (SSE) theo chu kỳ được chọn
   const sseUrl = `/api/system/performance/events?interval=${refreshInterval}`;
-  
+
   useEventSource(isPaused ? null : sseUrl, (data) => {
     if (!data) return;
     setLiveData(data);
     setLoading(false);
     setError(null);
 
-    // Cập nhật mảng lịch sử biểu đồ thời gian thực
     setHistory((prev) => {
       const now = new Date();
-      const timeStr = now.toTimeString().split(' ')[0].slice(3); // mm:ss
+      const timeStr = now.toTimeString().split(' ')[0].slice(3);
       const point = {
         time: timeStr,
         cpu: data.resource?.cpuLoad || 0,
         ram: data.resource?.memoryUsagePercent || 0,
-        rxRate: (data.traffic?.totalRxRateBps || 0) / 1000000, // Mbps
-        txRate: (data.traffic?.totalTxRateBps || 0) / 1000000, // Mbps
+        rxRate: (data.traffic?.totalRxRateBps || 0) / 1000000,
+        txRate: (data.traffic?.totalTxRateBps || 0) / 1000000,
         rawRxRate: data.traffic?.totalRxRateBps || 0,
         rawTxRate: data.traffic?.totalTxRateBps || 0,
       };
@@ -68,7 +64,6 @@ export default function SystemPerformancePage() {
     });
   });
 
-  // Tải dữ liệu lần đầu bằng REST nếu SSE chưa kịp gửi
   async function loadInitial() {
     try {
       const data = await api.systemPerformance();
@@ -91,51 +86,37 @@ export default function SystemPerformancePage() {
   const traffic = liveData?.traffic || {};
   const interfaces = liveData?.interfaces || [];
 
-  // Tính toán màu sắc cảnh báo theo % tải
   const getLoadColor = (percent) => {
-    if (percent >= 85) return 'text-rose-500 from-rose-500 to-red-600 border-rose-500/40 bg-rose-500/10';
-    if (percent >= 65) return 'text-amber-500 from-amber-500 to-orange-500 border-amber-500/40 bg-amber-500/10';
-    return 'text-emerald-500 from-emerald-400 to-teal-500 border-emerald-500/30 bg-emerald-500/10';
-  };
-
-  const getLoadStroke = (percent) => {
-    if (percent >= 85) return '#f43f5e';
-    if (percent >= 65) return '#f59e0b';
-    return '#10b981';
+    if (percent >= 85) return 'var(--red)';
+    if (percent >= 65) return 'var(--amber)';
+    return 'var(--green)';
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      {/* Topbar */}
+      <div className="sk-topbar flex-wrap">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="flex h-3 w-3 relative">
-              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isPaused ? 'bg-amber-400 opacity-75' : 'bg-primary opacity-75'}`}></span>
-              <span className={`relative inline-flex rounded-full h-3 w-3 ${isPaused ? 'bg-amber-500' : 'bg-primary'}`}></span>
+          <div className="flex items-center gap-2.5">
+            <h1 className="sk-title">Hiệu năng Router Real-Time</h1>
+            <span className={`sk-pill ${isPaused ? 'sk-pill--amber' : 'sk-pill--green'}`}>
+              <span className="sk-pill__dot" />
+              {isPaused ? 'PAUSED' : 'STREAMING'}
             </span>
-            <h1 className="text-2xl font-bold tracking-tight text-ink">
-              Hiệu năng Router Real-Time<span className="text-primary">.</span>
-            </h1>
           </div>
-          <p className="mt-1 text-sm text-ink-soft">
-            Giám sát CPU, RAM, Băng thông mạng và Phần cứng MikroTik RouterOS 7 theo thời gian thực
+          <p className="sk-subtitle font-mono">
+            Giám sát CPU, RAM, Băng thông mạng & Phần cứng MikroTik RouterOS 7
           </p>
         </div>
 
         {/* Realtime Action Controls */}
         <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex items-center gap-1 rounded-xl border border-white/50 bg-white/40 p-1 text-xs">
-            <span className="px-2 text-ink-faint font-medium">Tần suất:</span>
+          <div className="sk-seg">
             {[1000, 1500, 3000].map((ms) => (
               <button
                 key={ms}
                 onClick={() => setRefreshInterval(ms)}
-                className={`rounded-lg px-2.5 py-1 font-semibold transition ${
-                  refreshInterval === ms
-                    ? 'bg-primary text-white shadow-[0_0_10px_rgba(0,132,255,0.4)]'
-                    : 'text-ink-soft hover:bg-white/60 hover:text-ink'
-                }`}
+                className={`sk-seg__btn ${refreshInterval === ms ? 'is-on' : ''}`}
               >
                 {ms / 1000}s
               </button>
@@ -144,69 +125,63 @@ export default function SystemPerformancePage() {
 
           <button
             onClick={() => setIsPaused(!isPaused)}
-            className={`btn-ghost flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${
-              isPaused ? 'border-amber-400/50 text-amber-600 bg-amber-500/10' : ''
-            }`}
-            title={isPaused ? 'Tiếp tục nhận dữ liệu thời gian thực' : 'Tạm dừng biểu đồ'}
+            className={`btn btn-sm ${isPaused ? 'btn-primary' : 'btn-secondary'}`}
           >
-            <span>{isPaused ? '▶️ Tiếp tục' : '⏸️ Tạm dừng'}</span>
+            {isPaused ? '▶ Tiếp tục' : '⏸ Tạm dừng'}
           </button>
 
           <button
             onClick={loadInitial}
             disabled={loading}
-            className="btn-primary px-3 py-1.5 text-xs font-semibold"
-            title="Làm mới ngay lập tức"
+            className="btn btn-secondary btn-sm"
           >
-            {loading ? <Spinner size="sm" /> : '⟳ Làm mới'}
+            {loading ? <Spinner size="xs" /> : '⟳'} Làm mới
           </button>
         </div>
       </div>
 
-      {/* Thông báo lỗi nếu không kết nối được */}
       {error && (
-        <div className="glass rounded-2xl border-rose-300/60 p-4 shadow-[0_0_24px_rgba(244,63,94,0.18)]">
-          <div className="flex items-center gap-2 font-bold text-rose-600">
+        <div className="rounded-[var(--radius-lg)] border border-[rgba(251,111,111,0.3)] bg-[var(--red-bg)] p-4 text-xs">
+          <div className="flex items-center gap-2 font-bold text-[var(--red)]">
             <span>⚠️</span> {error}
           </div>
-          <p className="mt-1 text-xs text-ink-soft">
-            Hãy đảm bảo Router MikroTik đang chạy dịch vụ REST và tài khoản có quyền truy cập.
+          <p className="mt-1 text-[var(--text-dim)]">
+            Đảm bảo Router MikroTik đang chạy dịch vụ REST và tài khoản có quyền truy cập.
           </p>
         </div>
       )}
 
       {loading && !liveData ? (
-        <div className="glass flex h-64 items-center justify-center rounded-2xl">
+        <div className="sk-card flex h-64 items-center justify-center">
           <Spinner label="Đang kết nối luồng dữ liệu hiệu năng RouterOS…" />
         </div>
       ) : (
         <>
-          {/* Hàng Thẻ Chỉ số Cốt lõi (Gauge Cards) */}
+          {/* Hàng 4 Thẻ Chỉ số Cốt lõi (Gauge Cards) */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {/* 1. CPU Load */}
-            <div className="glass relative overflow-hidden rounded-2xl p-5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="label-caps text-xs">Bộ vi xử lý (CPU)</span>
-                <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${getLoadColor(res.cpuLoad || 0)}`}>
-                  {res.cpuCount} Nhân {res.cpuFrequency > 0 ? `@ ${res.cpuFrequency} MHz` : `(${res.cpu || res.architecture})`}
+            <div className="sk-kpi">
+              <div className="sk-kpi__header">
+                <span className="sk-kpi__label">Bộ vi xử lý (CPU)</span>
+                <span className="sk-state sk-state--accent font-mono text-[10px]">
+                  {res.cpuCount || 1} CORE {res.cpuFrequency ? `@ ${res.cpuFrequency}MHz` : ''}
                 </span>
               </div>
 
-              <div className="mt-4 flex items-center justify-between">
+              <div className="flex items-center justify-between mt-1">
                 <div>
-                  <div className="text-3xl font-extrabold tracking-tight text-ink">
-                    {res.cpuLoad || 0}<span className="text-lg font-semibold text-ink-soft">%</span>
+                  <div className="sk-kpi__value text-3xl">
+                    {res.cpuLoad || 0}<span className="text-base text-[var(--text-dim)]">%</span>
                   </div>
-                  <div className="mt-1 text-xs text-ink-faint">
-                    Kiến trúc: <b className="font-mono text-ink-soft">{res.cpu || res.architecture}</b>
+                  <div className="sk-kpi__sub font-mono text-[11px]">
+                    Arch: {res.cpu || res.architecture || 'ARM/MIPS'}
                   </div>
                 </div>
 
-                {/* SVG Gauge Mini */}
-                <div className="relative h-16 w-16">
+                <div className="relative h-14 w-14">
                   <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36">
                     <path
-                      className="text-ink/10"
+                      className="text-[var(--surface-3)]"
                       strokeWidth="3.5"
                       stroke="currentColor"
                       fill="none"
@@ -216,50 +191,48 @@ export default function SystemPerformancePage() {
                       strokeDasharray={`${Math.min(100, Math.max(0, res.cpuLoad || 0))}, 100`}
                       strokeWidth="3.5"
                       strokeLinecap="round"
-                      stroke={getLoadStroke(res.cpuLoad || 0)}
+                      stroke={getLoadColor(res.cpuLoad || 0)}
                       fill="none"
                       d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                     />
                   </svg>
-                  <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-ink">
+                  <span className="absolute inset-0 flex items-center justify-center font-mono text-[10px] font-bold text-[var(--text-dim)]">
                     CPU
                   </span>
                 </div>
               </div>
 
-              {/* Progress bar */}
-              <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-ink/10">
+              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-3)]">
                 <div
-                  className="h-full bg-gradient-to-r from-primary to-[#00a2ff] transition-all duration-500"
+                  className="h-full bg-[var(--accent)] transition-all duration-300"
                   style={{ width: `${Math.min(100, Math.max(0, res.cpuLoad || 0))}%` }}
                 />
               </div>
             </div>
 
             {/* 2. RAM Memory */}
-            <div className="glass relative overflow-hidden rounded-2xl p-5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="label-caps text-xs">Bộ nhớ RAM</span>
-                <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${getLoadColor(res.memoryUsagePercent || 0)}`}>
-                  {res.memoryUsagePercent || 0}% Đang dùng
+            <div className="sk-kpi">
+              <div className="sk-kpi__header">
+                <span className="sk-kpi__label">Bộ nhớ RAM</span>
+                <span className="sk-state sk-state--accent font-mono text-[10px]">
+                  {res.memoryUsagePercent || 0}% DÙNG
                 </span>
               </div>
 
-              <div className="mt-4 flex items-center justify-between">
+              <div className="flex items-center justify-between mt-1">
                 <div>
-                  <div className="text-2xl font-extrabold tracking-tight text-ink">
+                  <div className="sk-kpi__value text-2xl">
                     {formatStorageBytes(res.usedMemory)}
                   </div>
-                  <div className="mt-1 text-xs text-ink-faint">
-                    Tổng: <b className="text-ink-soft">{formatStorageBytes(res.totalMemory)}</b> · Trống: <b className="text-emerald-600">{formatStorageBytes(res.freeMemory)}</b>
+                  <div className="sk-kpi__sub font-mono text-[11px]">
+                    Tổng: {formatStorageBytes(res.totalMemory)} · Trống: {formatStorageBytes(res.freeMemory)}
                   </div>
                 </div>
 
-                {/* SVG Gauge Mini */}
-                <div className="relative h-16 w-16">
+                <div className="relative h-14 w-14">
                   <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36">
                     <path
-                      className="text-ink/10"
+                      className="text-[var(--surface-3)]"
                       strokeWidth="3.5"
                       stroke="currentColor"
                       fill="none"
@@ -269,138 +242,118 @@ export default function SystemPerformancePage() {
                       strokeDasharray={`${Math.min(100, Math.max(0, res.memoryUsagePercent || 0))}, 100`}
                       strokeWidth="3.5"
                       strokeLinecap="round"
-                      stroke="#8b5cf6"
+                      stroke="var(--violet)"
                       fill="none"
                       d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                     />
                   </svg>
-                  <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-tertiary">
+                  <span className="absolute inset-0 flex items-center justify-center font-mono text-[10px] font-bold text-[var(--violet)]">
                     RAM
                   </span>
                 </div>
               </div>
 
-              {/* Progress bar */}
-              <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-ink/10">
+              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-3)]">
                 <div
-                  className="h-full bg-gradient-to-r from-tertiary to-[#d946ef] transition-all duration-500"
+                  className="h-full bg-[var(--violet)] transition-all duration-300"
                   style={{ width: `${Math.min(100, Math.max(0, res.memoryUsagePercent || 0))}%` }}
                 />
               </div>
             </div>
 
-            {/* 3. Realtime Bandwidth (Download / Upload Rate) */}
-            <div className="glass relative overflow-hidden rounded-2xl p-5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="label-caps text-xs">Băng thông thời gian thực</span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live Traffic
+            {/* 3. Realtime Bandwidth */}
+            <div className="sk-kpi">
+              <div className="sk-kpi__header">
+                <span className="sk-kpi__label">Băng thông Live</span>
+                <span className="sk-pill sk-pill--green text-[9px] py-0 px-1.5">
+                  <span className="sk-pill__dot" /> LIVE
                 </span>
               </div>
 
-              <div className="mt-3 space-y-2">
-                <div className="flex items-center justify-between rounded-xl bg-emerald-500/10 px-3 py-1.5">
-                  <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
-                    <span>⬇️ Tải xuống (Rx):</span>
-                  </span>
-                  <span className="font-mono text-sm font-extrabold text-emerald-600">
+              <div className="space-y-1.5 mt-1">
+                <div className="flex items-center justify-between rounded-[var(--radius-sm)] bg-[var(--surface-2)] px-2.5 py-1 text-xs">
+                  <span className="font-mono text-[var(--text-dim)]">↓ Tải xuống:</span>
+                  <span className="font-mono font-bold text-[var(--green)]">
                     {formatSpeed(traffic.totalRxRateBps)}
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between rounded-xl bg-primary/10 px-3 py-1.5">
-                  <span className="flex items-center gap-1.5 text-xs font-semibold text-primary-deep">
-                    <span>⬆️ Tải lên (Tx):</span>
-                  </span>
-                  <span className="font-mono text-sm font-extrabold text-primary">
+                <div className="flex items-center justify-between rounded-[var(--radius-sm)] bg-[var(--surface-2)] px-2.5 py-1 text-xs">
+                  <span className="font-mono text-[var(--text-dim)]">↑ Tải lên:</span>
+                  <span className="font-mono font-bold text-[var(--accent-bright)]">
                     {formatSpeed(traffic.totalTxRateBps)}
                   </span>
                 </div>
               </div>
 
-              <div className="mt-3 flex items-center justify-between text-[11px] text-ink-faint">
-                <span>Tổng Rx: {formatStorageBytes(traffic.totalRxBytes)}</span>
-                <span>Tổng Tx: {formatStorageBytes(traffic.totalTxBytes)}</span>
+              <div className="mt-2.5 flex items-center justify-between text-[10px] font-mono text-[var(--text-faint)]">
+                <span>Rx: {formatStorageBytes(traffic.totalRxBytes)}</span>
+                <span>Tx: {formatStorageBytes(traffic.totalTxBytes)}</span>
               </div>
             </div>
 
             {/* 4. Hardware Health & Storage */}
-            <div className="glass relative overflow-hidden rounded-2xl p-5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="label-caps text-xs">Phần cứng & Bộ nhớ Flash</span>
-                <span className="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
-                  {res.badBlocks ? `Bad blocks: ${res.badBlocks}` : 'OK'}
+            <div className="sk-kpi">
+              <div className="sk-kpi__header">
+                <span className="sk-kpi__label">Phần cứng & Flash</span>
+                <span className="sk-tag sk-tag--prod text-[9px]">
+                  {res.badBlocks ? `BAD: ${res.badBlocks}` : 'HEALTHY'}
                 </span>
               </div>
 
-              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded-xl bg-white/40 p-2 text-center">
-                  <div className="text-[11px] text-ink-faint">Nhiệt độ CPU</div>
-                  <div className="mt-0.5 text-sm font-bold text-ink">
+              <div className="grid grid-cols-2 gap-2 text-xs mt-1">
+                <div className="rounded-[var(--radius-sm)] bg-[var(--surface-2)] p-2 text-center">
+                  <div className="text-[10px] font-mono text-[var(--text-faint)] uppercase">Nhiệt độ</div>
+                  <div className="font-mono font-bold text-[var(--text)] mt-0.5">
                     {health.temperature !== null ? `${health.temperature} °C` : '42 °C'}
                   </div>
                 </div>
 
-                <div className="rounded-xl bg-white/40 p-2 text-center">
-                  <div className="text-[11px] text-ink-faint">Điện áp nguồn</div>
-                  <div className="mt-0.5 text-sm font-bold text-ink">
-                    {health.voltage !== null ? `${health.voltage} V` : '24.1 V'}
+                <div className="rounded-[var(--radius-sm)] bg-[var(--surface-2)] p-2 text-center">
+                  <div className="text-[10px] font-mono text-[var(--text-faint)] uppercase">Điện áp</div>
+                  <div className="font-mono font-bold text-[var(--text)] mt-0.5">
+                    {health.voltage !== null ? `${health.voltage} V` : '24.0 V'}
                   </div>
                 </div>
               </div>
 
-              <div className="mt-3 flex items-center justify-between text-xs text-ink-soft">
-                <span>Ổ cứng Flash (HDD):</span>
-                <span className="font-semibold text-ink">
-                  {formatStorageBytes(res.usedHdd)} / {formatStorageBytes(res.totalHdd)} ({res.hddUsagePercent || 0}%)
-                </span>
-              </div>
-
-              <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-ink/10">
-                <div
-                  className="h-full bg-amber-500 transition-all duration-500"
-                  style={{ width: `${Math.min(100, Math.max(0, res.hddUsagePercent || 0))}%` }}
-                />
+              <div className="mt-2 flex items-center justify-between text-[11px] font-mono text-[var(--text-faint)]">
+                <span>Ổ Flash:</span>
+                <span>{res.hddUsagePercent || 0}% ({formatStorageBytes(res.usedHdd)}/{formatStorageBytes(res.totalHdd)})</span>
               </div>
             </div>
           </div>
 
-          {/* Biểu đồ Real-time Thời gian thực (Live SVG Charts) */}
+          {/* Biểu đồ Real-time Thời gian thực */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            {/* Chart 1: Lịch sử Tải CPU & RAM */}
-            <div className="glass rounded-2xl p-5 shadow-sm">
-              <div className="mb-4 flex items-center justify-between border-b border-white/40 pb-3">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/15 text-primary text-sm">
-                    📈
-                  </span>
-                  <div>
-                    <h2 className="text-sm font-bold text-ink">Đồ thị Tải CPU & RAM (Real-Time)</h2>
-                    <p className="text-[11px] text-ink-faint">Biểu đồ biến thiên 30 giây gần nhất</p>
-                  </div>
+            {/* Chart 1: CPU & RAM */}
+            <div className="sk-card">
+              <div className="mb-4 flex items-center justify-between border-b border-[var(--border-soft)] pb-3">
+                <div>
+                  <h2 className="text-sm font-bold text-[var(--text)]">Đồ thị Tải CPU & RAM (Real-Time)</h2>
+                  <p className="font-mono text-[11px] text-[var(--text-faint)]">30 giây gần nhất</p>
                 </div>
-                <div className="flex items-center gap-3 text-xs">
-                  <span className="flex items-center gap-1 font-semibold text-primary">
-                    <span className="h-2 w-2 rounded-full bg-primary" /> CPU ({res.cpuLoad || 0}%)
+                <div className="flex items-center gap-3 text-xs font-mono">
+                  <span className="flex items-center gap-1.5 text-[var(--accent-bright)]">
+                    <span className="h-2 w-2 rounded-full bg-[var(--accent)]" /> CPU ({res.cpuLoad || 0}%)
                   </span>
-                  <span className="flex items-center gap-1 font-semibold text-tertiary">
-                    <span className="h-2 w-2 rounded-full bg-tertiary" /> RAM ({res.memoryUsagePercent || 0}%)
+                  <span className="flex items-center gap-1.5 text-[var(--violet)]">
+                    <span className="h-2 w-2 rounded-full bg-[var(--violet)]" /> RAM ({res.memoryUsagePercent || 0}%)
                   </span>
                 </div>
               </div>
 
-              {/* Khung vẽ SVG Chart */}
-              <div className="relative h-48 w-full">
+              <div className="relative h-44 w-full">
                 {history.length < 2 ? (
-                  <div className="flex h-full items-center justify-center text-xs text-ink-faint">
+                  <div className="flex h-full items-center justify-center font-mono text-xs text-[var(--text-faint)]">
                     Đang thu thập dữ liệu thời gian thực…
                   </div>
                 ) : (
                   <RealtimeLineChart
                     data={history}
                     series={[
-                      { key: 'cpu', color: '#0084ff', label: 'CPU %' },
-                      { key: 'ram', color: '#8b5cf6', label: 'RAM %' },
+                      { key: 'cpu', color: 'var(--accent)', label: 'CPU %' },
+                      { key: 'ram', color: 'var(--violet)', label: 'RAM %' },
                     ]}
                     maxVal={100}
                     unit="%"
@@ -409,40 +362,34 @@ export default function SystemPerformancePage() {
               </div>
             </div>
 
-            {/* Chart 2: Lịch sử Băng thông Mạng (Download / Upload Mbps) */}
-            <div className="glass rounded-2xl p-5 shadow-sm">
-              <div className="mb-4 flex items-center justify-between border-b border-white/40 pb-3">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 text-sm">
-                    🌐
-                  </span>
-                  <div>
-                    <h2 className="text-sm font-bold text-ink">Đồ thị Lưu lượng Băng thông (Live Traffic)</h2>
-                    <p className="text-[11px] text-ink-faint">Tốc độ Tải xuống (Rx) & Tải lên (Tx)</p>
-                  </div>
+            {/* Chart 2: Traffic */}
+            <div className="sk-card">
+              <div className="mb-4 flex items-center justify-between border-b border-[var(--border-soft)] pb-3">
+                <div>
+                  <h2 className="text-sm font-bold text-[var(--text)]">Đồ thị Lưu lượng Mạng (Live Traffic)</h2>
+                  <p className="font-mono text-[11px] text-[var(--text-faint)]">Tốc độ Tải xuống (Rx) & Tải lên (Tx)</p>
                 </div>
-                <div className="flex items-center gap-3 text-xs">
-                  <span className="flex items-center gap-1 font-semibold text-emerald-600">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500" /> Tải xuống ({formatSpeed(traffic.totalRxRateBps)})
+                <div className="flex items-center gap-3 text-xs font-mono">
+                  <span className="flex items-center gap-1.5 text-[var(--green)]">
+                    <span className="h-2 w-2 rounded-full bg-[var(--green)]" /> Rx ({formatSpeed(traffic.totalRxRateBps)})
                   </span>
-                  <span className="flex items-center gap-1 font-semibold text-primary">
-                    <span className="h-2 w-2 rounded-full bg-primary" /> Tải lên ({formatSpeed(traffic.totalTxRateBps)})
+                  <span className="flex items-center gap-1.5 text-[var(--cyan)]">
+                    <span className="h-2 w-2 rounded-full bg-[var(--cyan)]" /> Tx ({formatSpeed(traffic.totalTxRateBps)})
                   </span>
                 </div>
               </div>
 
-              {/* Khung vẽ SVG Chart Traffic */}
-              <div className="relative h-48 w-full">
+              <div className="relative h-44 w-full">
                 {history.length < 2 ? (
-                  <div className="flex h-full items-center justify-center text-xs text-ink-faint">
+                  <div className="flex h-full items-center justify-center font-mono text-xs text-[var(--text-faint)]">
                     Đang thu thập lưu lượng mạng…
                   </div>
                 ) : (
                   <RealtimeLineChart
                     data={history}
                     series={[
-                      { key: 'rxRate', color: '#10b981', label: 'Download Mbps' },
-                      { key: 'txRate', color: '#0084ff', label: 'Upload Mbps' },
+                      { key: 'rxRate', color: 'var(--green)', label: 'Download' },
+                      { key: 'txRate', color: 'var(--cyan)', label: 'Upload' },
                     ]}
                     unit="Mbps"
                   />
@@ -451,101 +398,90 @@ export default function SystemPerformancePage() {
             </div>
           </div>
 
-          {/* Bảng Giám sát Chi tiết Toàn bộ Cổng mạng (Network Interfaces) */}
-          <section className="glass rounded-2xl p-6 shadow-sm">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-white/40 pb-3">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
-                  🔌
-                </span>
-                <div>
-                  <h2 className="text-base font-bold text-ink">Giám sát Các Cổng Mạng (Interface Traffic Monitor)</h2>
-                  <p className="text-xs text-ink-faint">
-                    Tốc độ truyền nhận thời gian thực trên từng card mạng vật lý và không dây
-                  </p>
-                </div>
+          {/* Bảng Giám sát Interface Traffic */}
+          <section className="sk-card">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-soft)] pb-3">
+              <div>
+                <h2 className="text-base font-bold text-[var(--text)]">Cổng Mạng RouterOS (Interface Traffic Monitor)</h2>
+                <p className="font-mono text-xs text-[var(--text-faint)]">
+                  Lưu lượng & Tốc độ truyền nhận trên từng Interface vật lý/ảo
+                </p>
               </div>
-              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                {interfaces.length} Cổng kết nối
+              <span className="sk-state sk-state--accent font-mono text-xs">
+                {interfaces.length} INTERFACES
               </span>
             </div>
 
-            <div className="overflow-x-auto rounded-xl border border-white/50 bg-white/30">
-              <table className="glass-table w-full text-left text-xs">
+            <div className="overflow-x-auto">
+              <table className="sk-dtable">
                 <thead>
-                  <tr className="label-caps">
-                    <th className="px-4 py-3 font-semibold">Tên Interface</th>
-                    <th className="px-4 py-3 font-semibold">Loại / Ghi chú</th>
-                    <th className="px-4 py-3 font-semibold">Trạng thái</th>
-                    <th className="px-4 py-3 text-right font-semibold">Tốc độ Tải xuống (Rx)</th>
-                    <th className="px-4 py-3 text-right font-semibold">Tốc độ Tải lên (Tx)</th>
-                    <th className="px-4 py-3 text-right font-semibold">Tổng Lưu lượng</th>
-                    <th className="px-4 py-3 text-right font-semibold">Gói tin / Lỗi</th>
+                  <tr>
+                    <th>Interface</th>
+                    <th>Loại / Ghi chú</th>
+                    <th>Trạng thái</th>
+                    <th className="text-right">Tốc độ Tải xuống (Rx)</th>
+                    <th className="text-right">Tốc độ Tải lên (Tx)</th>
+                    <th className="text-right">Tổng Lưu lượng</th>
+                    <th className="text-right">Gói tin / Lỗi</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-ink/5">
+                <tbody>
                   {interfaces.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="px-4 py-6 text-center text-ink-faint">
-                        Chưa tìm thấy thông tin interface nào trên router.
+                      <td colSpan="7" className="py-8 text-center font-mono text-xs text-[var(--text-faint)]">
+                        Chưa tìm thấy interface nào trên router.
                       </td>
                     </tr>
                   ) : (
                     interfaces.map((item) => (
-                      <tr key={item.id || item.name} className="hover:bg-white/40 transition">
-                        <td className="px-4 py-3 font-mono font-bold text-ink">
+                      <tr key={item.id || item.name}>
+                        <td className="font-mono font-bold">
                           <div className="flex items-center gap-2">
                             <span
                               className={`h-2 w-2 rounded-full ${
-                                item.running
-                                  ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]'
-                                  : 'bg-ink/30'
+                                item.running ? 'bg-[var(--green)] shadow-[0_0_6px_var(--green)]' : 'bg-[var(--text-ghost)]'
                               }`}
                             />
                             {item.name}
                           </div>
                         </td>
 
-                        <td className="px-4 py-3 text-ink-soft">
-                          <span className="rounded bg-ink/5 px-2 py-0.5 font-mono text-[10px] uppercase font-semibold text-ink-soft">
-                            {item.type}
-                          </span>
-                          {item.comment && <span className="ml-2 text-ink-faint">({item.comment})</span>}
+                        <td>
+                          <span className="sk-state text-[9px] mr-1.5">{item.type}</span>
+                          {item.comment && <span className="text-xs text-[var(--text-faint)]">({item.comment})</span>}
                         </td>
 
-                        <td className="px-4 py-3">
+                        <td>
                           {item.running ? (
-                            <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2.5 py-0.5 font-bold text-emerald-600">
-                              Đang chạy (Up)
+                            <span className="sk-pill sk-pill--green text-[10px] py-0 px-2">
+                              <span className="sk-pill__dot" /> UP
                             </span>
                           ) : item.disabled ? (
-                            <span className="inline-flex items-center rounded-full bg-ink/10 px-2.5 py-0.5 font-medium text-ink-faint">
-                              Đã tắt (Disabled)
-                            </span>
+                            <span className="sk-state text-[10px]">DISABLED</span>
                           ) : (
-                            <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2.5 py-0.5 font-medium text-amber-600">
-                              Chưa cắm dây (Link Down)
+                            <span className="sk-pill sk-pill--amber text-[10px] py-0 px-2">
+                              <span className="sk-pill__dot" /> DOWN
                             </span>
                           )}
                         </td>
 
-                        <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">
+                        <td className="text-right font-mono font-semibold text-[var(--green)]">
                           {item.running ? formatSpeed(item.rxRateBps) : '—'}
                         </td>
 
-                        <td className="px-4 py-3 text-right font-mono font-bold text-primary">
+                        <td className="text-right font-mono font-semibold text-[var(--cyan)]">
                           {item.running ? formatSpeed(item.txRateBps) : '—'}
                         </td>
 
-                        <td className="px-4 py-3 text-right font-mono text-ink-soft">
-                          <div>⬇️ {formatStorageBytes(item.rxBytes)}</div>
-                          <div className="text-[10px] text-ink-faint">⬆️ {formatStorageBytes(item.txBytes)}</div>
+                        <td className="text-right font-mono text-xs text-[var(--text-dim)]">
+                          <div>↓ {formatStorageBytes(item.rxBytes)}</div>
+                          <div className="text-[10px] text-[var(--text-faint)]">↑ {formatStorageBytes(item.txBytes)}</div>
                         </td>
 
-                        <td className="px-4 py-3 text-right text-ink-faint font-mono">
+                        <td className="text-right font-mono text-xs text-[var(--text-faint)]">
                           <div>{(item.rxPacket + item.txPacket).toLocaleString()} pkts</div>
                           {(item.rxDrop > 0 || item.txDrop > 0 || item.rxError > 0) && (
-                            <div className="text-[10px] text-rose-500 font-bold">
+                            <div className="text-[10px] text-[var(--red)] font-semibold">
                               Drops: {item.rxDrop + item.txDrop} · Err: {item.rxError + item.txError}
                             </div>
                           )}
@@ -558,47 +494,42 @@ export default function SystemPerformancePage() {
             </div>
           </section>
 
-          {/* Thông tin Chi tiết Phần cứng & Firmware RouterBOARD */}
-          <section className="glass rounded-2xl p-6 shadow-sm">
-            <div className="mb-4 flex items-center gap-2.5 border-b border-white/40 pb-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
-                ℹ️
-              </span>
-              <div>
-                <h2 className="text-base font-bold text-ink">Thông tin Thiết bị RouterBOARD</h2>
-                <p className="text-xs text-ink-faint">Chi tiết phần cứng, firmware và hệ điều hành RouterOS 7</p>
-              </div>
+          {/* RouterBOARD specs */}
+          <section className="sk-card">
+            <div className="mb-3 flex items-center gap-2 border-b border-[var(--border-soft)] pb-3">
+              <h2 className="text-sm font-bold text-[var(--text)]">Thông số Phần cứng RouterBOARD</h2>
+              <span className="sk-tag sk-tag--prod text-[9px]">ROS 7</span>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6 text-xs">
-              <div className="rounded-xl bg-white/40 p-3">
-                <div className="text-ink-faint">Model Router</div>
-                <div className="mt-1 font-bold text-ink font-mono">{rb.model || res.boardName}</div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 text-xs">
+              <div className="rounded-[var(--radius-sm)] bg-[var(--surface-2)] p-2.5">
+                <div className="font-mono text-[10px] text-[var(--text-faint)] uppercase">Model</div>
+                <div className="font-mono font-bold text-[var(--text)] mt-0.5">{rb.model || res.boardName}</div>
               </div>
 
-              <div className="rounded-xl bg-white/40 p-3">
-                <div className="text-ink-faint">Số Serial</div>
-                <div className="mt-1 font-bold text-primary font-mono">{rb.serialNumber || '—'}</div>
+              <div className="rounded-[var(--radius-sm)] bg-[var(--surface-2)] p-2.5">
+                <div className="font-mono text-[10px] text-[var(--text-faint)] uppercase">Serial Number</div>
+                <div className="font-mono font-bold text-[var(--accent-bright)] mt-0.5">{rb.serialNumber || '—'}</div>
               </div>
 
-              <div className="rounded-xl bg-white/40 p-3">
-                <div className="text-ink-faint">Phiên bản RouterOS</div>
-                <div className="mt-1 font-bold text-ink">{res.version}</div>
+              <div className="rounded-[var(--radius-sm)] bg-[var(--surface-2)] p-2.5">
+                <div className="font-mono text-[10px] text-[var(--text-faint)] uppercase">RouterOS Version</div>
+                <div className="font-mono font-bold text-[var(--text)] mt-0.5">{res.version}</div>
               </div>
 
-              <div className="rounded-xl bg-white/40 p-3">
-                <div className="text-ink-faint">Firmware RouterBOARD</div>
-                <div className="mt-1 font-bold text-ink font-mono">{rb.currentFirmware || '7.x'}</div>
+              <div className="rounded-[var(--radius-sm)] bg-[var(--surface-2)] p-2.5">
+                <div className="font-mono text-[10px] text-[var(--text-faint)] uppercase">Firmware</div>
+                <div className="font-mono font-bold text-[var(--text)] mt-0.5">{rb.currentFirmware || '7.x'}</div>
               </div>
 
-              <div className="rounded-xl bg-white/40 p-3">
-                <div className="text-ink-faint">Thời gian hoạt động (Uptime)</div>
-                <div className="mt-1 font-bold text-emerald-600 font-mono">{res.uptime}</div>
+              <div className="rounded-[var(--radius-sm)] bg-[var(--surface-2)] p-2.5">
+                <div className="font-mono text-[10px] text-[var(--text-faint)] uppercase">Uptime</div>
+                <div className="font-mono font-bold text-[var(--green)] mt-0.5">{res.uptime}</div>
               </div>
 
-              <div className="rounded-xl bg-white/40 p-3">
-                <div className="text-ink-faint">Nền tảng kiến trúc</div>
-                <div className="mt-1 font-bold text-ink">{res.platform} ({res.architecture})</div>
+              <div className="rounded-[var(--radius-sm)] bg-[var(--surface-2)] p-2.5">
+                <div className="font-mono text-[10px] text-[var(--text-faint)] uppercase">Architecture</div>
+                <div className="font-mono font-bold text-[var(--text)] mt-0.5">{res.platform} ({res.architecture})</div>
               </div>
             </div>
           </section>
@@ -608,11 +539,9 @@ export default function SystemPerformancePage() {
   );
 }
 
-// Component Biểu đồ SVG Realtime Line/Area Chart siêu nhẹ và mượt mà
 function RealtimeLineChart({ data = [], series = [], maxVal = null, unit = '' }) {
   if (!data || data.length < 2) return null;
 
-  // Tìm giá trị max thực tế để co giãn tỷ lệ (scale)
   let computedMax = maxVal;
   if (!computedMax) {
     let highest = 0;
@@ -627,14 +556,13 @@ function RealtimeLineChart({ data = [], series = [], maxVal = null, unit = '' })
   const width = 500;
   const height = 160;
   const paddingX = 35;
-  const paddingY = 20;
+  const paddingY = 16;
   const chartW = width - paddingX - 10;
   const chartH = height - paddingY * 2;
 
   const pointsCount = data.length;
   const stepX = chartW / (pointsCount - 1);
 
-  // Tạo đường dẫn d cho SVG
   const generatePath = (key) => {
     return data
       .map((d, i) => {
@@ -656,16 +584,7 @@ function RealtimeLineChart({ data = [], series = [], maxVal = null, unit = '' })
   return (
     <div className="h-full w-full">
       <svg className="h-full w-full overflow-visible" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-        <defs>
-          {series.map((s) => (
-            <linearGradient key={`grad-${s.key}`} id={`grad-${s.key}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={s.color} stopOpacity="0.3" />
-              <stop offset="100%" stopColor={s.color} stopOpacity="0.0" />
-            </linearGradient>
-          ))}
-        </defs>
-
-        {/* Lưới ngang (Grid lines) */}
+        {/* Lưới ngang */}
         {[0, 0.5, 1].map((ratio) => {
           const y = paddingY + chartH * (1 - ratio);
           const labelVal = Math.round(computedMax * ratio);
@@ -676,15 +595,14 @@ function RealtimeLineChart({ data = [], series = [], maxVal = null, unit = '' })
                 y1={y}
                 x2={width - 10}
                 y2={y}
-                stroke="currentColor"
-                strokeOpacity="0.08"
-                strokeDasharray="4 4"
+                stroke="var(--border-soft)"
+                strokeDasharray="3 3"
               />
               <text
                 x={paddingX - 6}
                 y={y + 3}
                 textAnchor="end"
-                className="fill-ink-faint text-[9px] font-mono"
+                className="fill-[var(--text-faint)] text-[9px] font-mono"
               >
                 {labelVal}{unit}
               </text>
@@ -692,22 +610,22 @@ function RealtimeLineChart({ data = [], series = [], maxVal = null, unit = '' })
           );
         })}
 
-        {/* Vùng Area & Đường Line cho từng series */}
+        {/* Series paths */}
         {series.map((s) => (
           <g key={s.key}>
-            <path d={generateAreaPath(s.key)} fill={`url(#grad-${s.key})`} />
+            <path d={generateAreaPath(s.key)} fill={s.color} fillOpacity="0.08" />
             <path
               d={generatePath(s.key)}
               fill="none"
               stroke={s.color}
-              strokeWidth="2.2"
+              strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
           </g>
         ))}
 
-        {/* Điểm nút cuối cùng (Pulse Dot) */}
+        {/* Pulse dots */}
         {series.map((s) => {
           const lastIndex = pointsCount - 1;
           const lastVal = data[lastIndex]?.[s.key] || 0;
@@ -718,9 +636,8 @@ function RealtimeLineChart({ data = [], series = [], maxVal = null, unit = '' })
               key={`dot-${s.key}`}
               cx={x}
               cy={y}
-              r="4"
+              r="3.5"
               fill={s.color}
-              className="drop-shadow-[0_0_6px_rgba(0,132,255,0.8)]"
             />
           );
         })}

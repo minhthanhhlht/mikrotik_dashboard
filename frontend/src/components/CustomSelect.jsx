@@ -1,21 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 /**
- * CustomSelect — Neon Glass Light Dropdown component
- * Replaces native unstyled HTML <select> with a beautiful frosted glassmorphism popover.
- *
- * @param {Object} props
- * @param {string} [props.id]
- * @param {string} [props.name]
- * @param {string} props.value - Currently selected value
- * @param {Function} props.onChange - Callback fn(value, optionObject)
- * @param {Array<Object|string>} props.options - List of options: [{ value, label, sublabel, badge, icon, disabled }] or string[]
- * @param {string} [props.placeholder='Chọn tùy chọn…']
- * @param {string} [props.className=''] - Container class
- * @param {string} [props.buttonClassName=''] - Trigger button override class
- * @param {boolean} [props.searchable=false] - Show search filter inside dropdown
- * @param {boolean} [props.disabled=false]
- * @param {string} [props['aria-label']]
+ * CustomSelect — ServerKit Infra Console Dropdown component
+ * Replaces native unstyled HTML <select> with a theme-aware dropdown.
  */
 export default function CustomSelect({
   id,
@@ -37,7 +24,6 @@ export default function CustomSelect({
   const dropdownRef = useRef(null);
   const searchInputRef = useRef(null);
 
-  // Normalize options array to standard object format
   const normalizedOptions = useMemo(() => {
     return options.map((opt) => {
       if (typeof opt === 'string' || typeof opt === 'number') {
@@ -54,12 +40,10 @@ export default function CustomSelect({
     });
   }, [options]);
 
-  // Current selected option object
   const selectedOption = useMemo(() => {
     return normalizedOptions.find((opt) => String(opt.value) === String(value));
   }, [normalizedOptions, value]);
 
-  // Filter options if searchable
   const filteredOptions = useMemo(() => {
     if (!searchable || !searchTerm.trim()) return normalizedOptions;
     const q = searchTerm.trim().toLowerCase();
@@ -71,7 +55,6 @@ export default function CustomSelect({
     );
   }, [normalizedOptions, searchable, searchTerm]);
 
-  // Close when clicking outside
   useEffect(() => {
     function handleClickOutside(e) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -88,7 +71,6 @@ export default function CustomSelect({
     };
   }, [isOpen]);
 
-  // Focus search input when opening
   useEffect(() => {
     if (isOpen && searchable && searchInputRef.current) {
       setTimeout(() => searchInputRef.current?.focus(), 50);
@@ -98,7 +80,6 @@ export default function CustomSelect({
     }
   }, [isOpen, searchable]);
 
-  // Handle keyboard navigation
   function handleKeyDown(e) {
     if (disabled) return;
     if (e.key === 'Escape') {
@@ -118,7 +99,6 @@ export default function CustomSelect({
     if (opt.disabled) return;
     setIsOpen(false);
     if (onChange) {
-      // Create synthetic event-like object for compatibility
       const syntheticEvent = {
         target: { name: name || selectId, value: opt.value },
         currentTarget: { name: name || selectId, value: opt.value },
@@ -133,10 +113,8 @@ export default function CustomSelect({
       className={`relative inline-block text-left ${className}`}
       onKeyDown={handleKeyDown}
     >
-      {/* Hidden input for form accessibility / standard form capture */}
       <input type="hidden" id={selectId} name={name} value={value ?? ''} />
 
-      {/* Trigger Button */}
       <button
         type="button"
         id={`${selectId}-button`}
@@ -145,74 +123,58 @@ export default function CustomSelect({
         aria-label={ariaLabel || placeholder}
         disabled={disabled}
         onClick={() => !disabled && setIsOpen((prev) => !prev)}
-        className={`group flex w-full items-center justify-between gap-2.5 rounded-xl border border-white/60 bg-white/70 px-3.5 py-2 text-xs font-semibold text-ink shadow-xs backdrop-blur-md transition-all hover:border-primary/50 hover:bg-white hover:shadow-[0_0_16px_rgba(0,132,255,0.2)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 ${
+        className={`group flex w-full items-center justify-between gap-2 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs font-medium text-[var(--text)] transition-all hover:border-[var(--border-strong)] hover:bg-[var(--surface-hover)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-bg)] disabled:cursor-not-allowed disabled:opacity-50 ${
           isOpen
-            ? 'border-primary/80 bg-white ring-2 ring-primary/20 shadow-[0_0_20px_rgba(0,132,255,0.25)]'
+            ? 'border-[var(--accent)] bg-[var(--surface)] ring-2 ring-[var(--accent-bg)]'
             : ''
         } ${buttonClassName}`}
       >
         <span className="flex items-center gap-2 truncate min-w-0 text-left">
           {selectedOption?.icon && <span className="shrink-0">{selectedOption.icon}</span>}
-          <span className={`truncate ${!selectedOption ? 'text-ink-faint font-normal' : 'text-ink font-bold'}`}>
+          <span className={`truncate ${!selectedOption ? 'text-[var(--text-ghost)] font-normal' : 'text-[var(--text)] font-medium'}`}>
             {selectedOption ? selectedOption.label : placeholder}
           </span>
           {selectedOption?.badge && (
-            <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary shrink-0">
+            <span className="rounded bg-[var(--accent-bg)] px-1.5 py-0.5 text-[10px] font-mono font-bold uppercase text-[var(--accent-bright)] shrink-0">
               {selectedOption.badge}
             </span>
           )}
         </span>
 
-        {/* Animated Chevron Arrow */}
         <span
-          className={`shrink-0 text-ink-soft transition-transform duration-200 ${
-            isOpen ? 'rotate-180 text-primary' : 'group-hover:text-primary'
+          className={`shrink-0 text-[var(--text-faint)] transition-transform duration-200 ${
+            isOpen ? 'rotate-180 text-[var(--accent)]' : 'group-hover:text-[var(--text-dim)]'
           }`}
         >
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-4 w-4">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5">
             <path d="M5 7.5L10 12.5L15 7.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </span>
       </button>
 
-      {/* Floating Glass Dropdown Panel */}
       {isOpen && (
         <div
           role="listbox"
           tabIndex={-1}
-          className="absolute left-0 z-50 mt-1.5 min-w-full w-max max-w-[min(100vw-2rem,480px)] origin-top rounded-2xl border border-white/80 bg-white/95 p-1.5 shadow-[0_16px_40px_rgba(0,132,255,0.18),0_4px_16px_rgba(0,0,0,0.08)] backdrop-blur-2xl ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-150"
+          className="absolute left-0 z-50 mt-1 min-w-full w-max max-w-[min(100vw-2rem,480px)] origin-top rounded-[var(--radius)] border border-[var(--border-strong)] bg-[var(--surface-2)] p-1 shadow-[var(--shadow-lg)] ring-1 ring-black/10"
         >
-          {/* Search box if enabled */}
           {searchable && (
-            <div className="p-1.5 pb-2 border-b border-ink/5">
-              <div className="relative">
-                <svg
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-faint"
-                >
-                  <circle cx="9" cy="9" r="5.5" />
-                  <path d="m13.5 13.5 3.5 3.5" strokeLinecap="round" />
-                </svg>
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Tìm kiếm…"
-                  className="w-full rounded-lg bg-ink/5 py-1.5 pl-8 pr-3 text-xs text-ink placeholder:text-ink-faint focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary"
-                  onClick={(e) => e.stopPropagation()}
-                />
-              </div>
+            <div className="p-1 border-b border-[var(--border-soft)] mb-1">
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Tìm kiếm…"
+                className="w-full rounded-[var(--radius-sm)] bg-[var(--surface-3)] border border-[var(--border)] py-1.5 px-2.5 text-xs text-[var(--text)] placeholder:text-[var(--text-ghost)] focus:bg-[var(--surface)] focus:border-[var(--accent)] focus:outline-none"
+                onClick={(e) => e.stopPropagation()}
+              />
             </div>
           )}
 
-          {/* Options list */}
-          <div className="max-h-60 overflow-y-auto space-y-0.5 p-0.5 custom-scrollbar">
+          <div className="max-h-60 overflow-y-auto space-y-0.5 p-0.5">
             {filteredOptions.length === 0 ? (
-              <div className="px-3 py-4 text-center text-xs text-ink-faint">
+              <div className="px-3 py-4 text-center text-xs font-mono text-[var(--text-faint)]">
                 Không tìm thấy tùy chọn phù hợp
               </div>
             ) : (
@@ -226,20 +188,20 @@ export default function CustomSelect({
                     aria-selected={isSelected}
                     disabled={opt.disabled}
                     onClick={() => handleSelect(opt)}
-                    className={`group flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-xs transition-all ${
+                    className={`group flex w-full items-center justify-between gap-3 rounded-[calc(var(--radius-sm)-2px)] px-3 py-2 text-left text-xs transition-all ${
                       isSelected
-                        ? 'bg-gradient-to-r from-primary-soft to-primary-soft/40 font-bold text-primary shadow-xs'
+                        ? 'bg-[var(--accent-bg)] font-semibold text-[var(--accent-bright)]'
                         : opt.disabled
-                        ? 'cursor-not-allowed opacity-40 text-ink-faint'
-                        : 'text-ink hover:bg-primary-soft/60 hover:text-primary'
+                        ? 'cursor-not-allowed opacity-40 text-[var(--text-ghost)]'
+                        : 'text-[var(--text)] hover:bg-[var(--surface-hover)]'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="flex items-center gap-2 min-w-0">
                       {opt.icon && <span className="shrink-0">{opt.icon}</span>}
                       <div className="min-w-0">
-                        <div className="truncate font-semibold">{opt.label}</div>
+                        <div className="truncate font-medium">{opt.label}</div>
                         {opt.sublabel && (
-                          <div className="text-[10px] text-ink-faint truncate font-normal">
+                          <div className="text-[10px] font-mono text-[var(--text-faint)] truncate">
                             {opt.sublabel}
                           </div>
                         )}
@@ -249,10 +211,10 @@ export default function CustomSelect({
                     <div className="flex items-center gap-1.5 shrink-0">
                       {opt.badge && (
                         <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                          className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold ${
                             isSelected
-                              ? 'bg-primary text-white shadow-[0_0_10px_rgba(0,132,255,0.5)]'
-                              : 'bg-ink/5 text-ink-soft group-hover:bg-primary/20 group-hover:text-primary'
+                              ? 'bg-[var(--accent)] text-white'
+                              : 'bg-[var(--surface-3)] text-[var(--text-dim)]'
                           }`}
                         >
                           {opt.badge}
@@ -262,7 +224,7 @@ export default function CustomSelect({
                         <svg
                           viewBox="0 0 20 20"
                           fill="currentColor"
-                          className="h-4 w-4 text-primary shrink-0"
+                          className="h-3.5 w-3.5 text-[var(--accent)] shrink-0"
                         >
                           <path
                             fillRule="evenodd"

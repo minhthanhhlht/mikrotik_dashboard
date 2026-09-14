@@ -37,87 +37,89 @@ export default function SessionsPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <header className="flex flex-wrap items-center justify-between gap-4">
+    <div className="space-y-6">
+      {/* Topbar */}
+      <div className="sk-topbar flex-wrap">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-ink">
-            Phiên hoạt động
-            <span className="text-primary">.</span>
-          </h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            Danh sách /ip/hotspot/active · tự làm mới mỗi 15 giây
+          <h1 className="sk-title">Phiên hoạt động (Active Sessions)</h1>
+          <p className="sk-subtitle font-mono">
+            Danh sách /ip/hotspot/active · Tự động làm mới mỗi 15 giây
           </p>
         </div>
-        <button onClick={reload} className="btn-ghost px-4 py-2 text-sm">
-          ⟳ Làm mới
-        </button>
-      </header>
+        <div className="flex items-center gap-2.5">
+          <span className="sk-pill sk-pill--green text-[10px]">
+            <span className="sk-pill__dot" />
+            {sessions.length} ACTIVE
+          </span>
+          <button onClick={reload} className="btn btn-secondary btn-sm">
+            ⟳ Làm mới
+          </button>
+        </div>
+      </div>
 
       {error && (
-        <div className="glass rounded-2xl border-danger/40 p-5 shadow-[0_0_24px_rgba(225,29,72,0.15)]">
-          <p className="font-semibold text-danger">Không lấy được danh sách phiên.</p>
-          <p className="mt-1 text-sm text-ink-soft">{error}</p>
-          <button onClick={reload} className="btn-danger mt-3 px-4 py-2 text-xs">
+        <div className="rounded-[var(--radius-lg)] border border-[rgba(251,111,111,0.3)] bg-[var(--red-bg)] p-4 text-xs">
+          <p className="font-semibold text-[var(--red)]">Không lấy được danh sách phiên.</p>
+          <p className="mt-1 text-[var(--text-dim)]">{error}</p>
+          <button onClick={reload} className="btn btn-danger btn-sm mt-3">
             ⟳ Thử lại
           </button>
         </div>
       )}
 
       {loading && !error ? (
-        <Spinner label="Đang tải…" />
+        <Spinner label="Đang đồng bộ danh sách phiên từ router…" />
       ) : (
-        <div className="glass overflow-hidden rounded-2xl">
+        <div className="sk-card p-0 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="glass-table w-full text-left text-sm">
+            <table className="sk-dtable">
               <thead>
-                <tr className="label-caps">
-                  <th className="px-5 py-3.5 font-semibold">Người dùng</th>
-                  <th className="px-5 py-3.5 font-semibold">IP</th>
-                  <th className="px-5 py-3.5 font-semibold">MAC</th>
-                  <th className="px-5 py-3.5 font-semibold">Uptime</th>
-                  <th className="px-5 py-3.5 font-semibold">Idle</th>
-                  <th className="px-5 py-3.5 font-semibold">Dữ liệu ↓ / ↑</th>
-                  <th className="px-5 py-3.5 text-right font-semibold">Thao tác</th>
+                <tr>
+                  <th>Người dùng</th>
+                  <th>Địa chỉ IP</th>
+                  <th>Địa chỉ MAC</th>
+                  <th>Uptime</th>
+                  <th>Idle Time</th>
+                  <th>Dữ liệu ↓ / ↑</th>
+                  <th className="text-right">Thao tác</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-ink/5">
+              <tbody>
                 {sessions.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-5 py-12 text-center text-ink-faint">
+                    <td colSpan={7} className="py-12 text-center font-mono text-xs text-[var(--text-faint)]">
                       Không có phiên nào đang hoạt động.
                     </td>
                   </tr>
                 )}
                 {sessions.map((s) => (
                   <tr key={s['.id']}>
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-2.5">
-                        <span className="neon-dot" />
-                        <span className="font-semibold text-ink">{s.user}</span>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <span className="sk-pill sk-pill--green text-[8px] p-0.5" />
+                        <span className="font-mono font-semibold text-[var(--text)]">{s.user}</span>
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 font-mono text-xs text-ink-soft">{s.ip}</td>
-                    <td className="px-5 py-3.5 font-mono text-xs text-ink-faint">
-                      {s['mac-address']}
+                    <td className="font-mono text-xs text-[var(--text-dim)]">{s.ip}</td>
+                    <td className="font-mono text-xs text-[var(--text-faint)]">{s['mac-address']}</td>
+                    <td className="font-mono text-xs text-[var(--text-dim)]">{formatDuration(s.uptime)}</td>
+                    <td className="font-mono text-xs text-[var(--text-faint)]">{formatDuration(s['idle-time'])}</td>
+                    <td className="font-mono text-xs">
+                      <span className="text-[var(--green)] font-semibold">{formatBytes(s['bytes-in'])}</span> ↓ /{' '}
+                      <span className="text-[var(--cyan)] font-semibold">{formatBytes(s['bytes-out'])}</span> ↑
                     </td>
-                    <td className="px-5 py-3.5 text-ink-soft">{formatDuration(s.uptime)}</td>
-                    <td className="px-5 py-3.5 text-ink-soft">{formatDuration(s['idle-time'])}</td>
-                    <td className="px-5 py-3.5 text-ink-soft">
-                      <span className="font-medium text-primary">{formatBytes(s['bytes-in'])}</span> ↓ /{' '}
-                      <span className="font-medium text-secondary">{formatBytes(s['bytes-out'])}</span> ↑
-                    </td>
-                    <td className="px-5 py-3.5 text-right">
+                    <td className="text-right">
                       {isViewer ? (
-                        <span className="rounded-md bg-ink/5 px-2.5 py-1 text-xs italic text-ink-faint">
-                          Chỉ xem
+                        <span className="font-mono text-xs text-[var(--text-faint)]">
+                          READ ONLY
                         </span>
                       ) : (
                         <button
                           onClick={() => handleDisconnect(s)}
                           disabled={busyId === s['.id']}
-                          className="btn-danger px-3.5 py-1.5 text-xs disabled:opacity-50"
+                          className="btn btn-danger btn-sm h-7 px-2.5 text-[11px] font-mono"
                         >
-                          {busyId === s['.id'] ? 'Đang xử lý…' : 'Ngắt'}
+                          {busyId === s['.id'] ? 'Đang xử lý…' : 'Ngắt kết nối'}
                         </button>
                       )}
                     </td>

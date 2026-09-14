@@ -17,15 +17,13 @@ const EMPTY = {
   'add-mac-cookie': 'true',
 };
 
-const inputCls = 'input-ghost';
-
 function Field({ label, children, hint }) {
   return (
-    <label className="block">
-      <span className="label-caps mb-1.5 block">{label}</span>
+    <div>
+      <label className="form-label">{label}</label>
       {children}
-      {hint && <span className="mt-1 block text-xs text-ink-faint">{hint}</span>}
-    </label>
+      {hint && <span className="mt-1 block text-[11px] font-mono text-[var(--text-faint)]">{hint}</span>}
+    </div>
   );
 }
 
@@ -90,7 +88,7 @@ export default function ProfilesPage() {
         if (body[k] === undefined || body[k] === null || body[k] === '') delete body[k];
       });
       if (editing) {
-        delete body.name; // không đổi tên profile qua PUT
+        delete body.name;
         await api.updateProfile(editing['.id'], body);
         toast.success(`Đã cập nhật hồ sơ "${editing.name}"`, 'Cập nhật thành công');
       } else {
@@ -122,130 +120,116 @@ export default function ProfilesPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <header className="flex flex-wrap items-center justify-between gap-4">
+    <div className="space-y-6">
+      {/* Topbar */}
+      <div className="sk-topbar flex-wrap">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-ink">
-            Hồ sơ (Profile)
-            <span className="text-primary">.</span>
-          </h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            Quản lý /ip/hotspot/user/profile · giới hạn tốc độ, thời gian, MAC cookie
+          <h1 className="sk-title">Hồ sơ gói cước (Profiles)</h1>
+          <p className="sk-subtitle font-mono">
+            Quản lý /ip/hotspot/user/profile · Giới hạn tốc độ, thời gian, MAC cookie
           </p>
         </div>
         {canManageProfiles && (
-          <button onClick={openCreate} className="btn-primary px-4 py-2 text-sm">
-            <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-              <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
-            </svg>
-            Thêm hồ sơ
+          <button onClick={openCreate} className="btn btn-primary btn-sm">
+            + Thêm hồ sơ
           </button>
         )}
-      </header>
+      </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative w-64">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint">
-            <circle cx="9" cy="9" r="5.5" />
-            <path d="m13.5 13.5 3.5 3.5" strokeLinecap="round" />
-          </svg>
+      <div className="flex items-center justify-between gap-3">
+        <div className="w-64">
           <input
             id="profiles-search"
             name="profilesSearch"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Tìm hồ sơ…"
-            className="input-ghost pl-9"
+            className="form-input text-xs h-8"
           />
         </div>
-        <span className="text-xs font-medium text-ink-faint">
+        <span className="font-mono text-xs text-[var(--text-faint)]">
           {filtered.length}/{profiles.length} hồ sơ
         </span>
       </div>
 
       {error ? (
-        <div className="glass rounded-2xl border-danger/40 p-5 shadow-[0_0_24px_rgba(225,29,72,0.15)]">
-          <p className="font-semibold text-danger">Không lấy được danh sách hồ sơ.</p>
-          <p className="mt-1 text-sm text-ink-soft">{error}</p>
-          <button onClick={reload} className="btn-danger mt-3 px-4 py-2 text-xs">
+        <div className="rounded-[var(--radius-lg)] border border-[rgba(251,111,111,0.3)] bg-[var(--red-bg)] p-4 text-xs">
+          <p className="font-semibold text-[var(--red)]">Không lấy được danh sách hồ sơ.</p>
+          <p className="mt-1 text-[var(--text-dim)]">{error}</p>
+          <button onClick={reload} className="btn btn-danger btn-sm mt-3">
             ⟳ Thử lại
           </button>
         </div>
       ) : loading ? (
-        <Spinner label="Đang tải hồ sơ…" />
+        <Spinner label="Đang tải danh sách hồ sơ…" />
       ) : (
-        <div className="glass overflow-hidden rounded-2xl">
+        <div className="sk-card p-0 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="glass-table w-full text-left text-sm">
+            <table className="sk-dtable">
               <thead>
-                <tr className="label-caps">
-                  <th className="px-5 py-3.5 font-semibold">Tên</th>
-                  <th className="px-5 py-3.5 font-semibold">Tốc độ (rate-limit)</th>
-                  <th className="px-5 py-3.5 font-semibold">Số user dùng chung</th>
-                  <th className="px-5 py-3.5 font-semibold">Idle timeout</th>
-                  <th className="px-5 py-3.5 font-semibold">MAC cookie</th>
-                  <th className="px-5 py-3.5 text-right font-semibold">Thao tác</th>
+                <tr>
+                  <th>Tên hồ sơ</th>
+                  <th>Tốc độ (rate-limit)</th>
+                  <th>Số user dùng chung</th>
+                  <th>Idle timeout</th>
+                  <th>MAC cookie</th>
+                  <th className="text-right">Thao tác</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-ink/5">
+              <tbody>
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-5 py-12 text-center text-ink-faint">
+                    <td colSpan={6} className="py-12 text-center font-mono text-xs text-[var(--text-faint)]">
                       Không có hồ sơ nào.
                     </td>
                   </tr>
                 )}
                 {filtered.map((p) => (
                   <tr key={p['.id']}>
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-2.5">
-                        <span className={`neon-dot ${p.default === 'true' ? '' : 'neon-dot-danger'}`} />
-                        <span className="font-semibold text-ink">{p.name}</span>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-semibold text-[var(--text)]">{p.name}</span>
                         {p.default === 'true' && (
-                          <span className="rounded-full bg-tertiary-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-tertiary">
-                            default
-                          </span>
+                          <span className="sk-state sk-state--accent text-[9px]">DEFAULT</span>
                         )}
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 text-ink-soft">
+                    <td className="font-mono text-xs">
                       {p['rate-limit'] ? (
-                        <span className="rounded-lg bg-primary-soft px-2.5 py-1 text-xs font-semibold text-primary-deep">
-                          {p['rate-limit']}
-                        </span>
+                        <span className="sk-state sk-state--cyan text-[10px]">{p['rate-limit']}</span>
                       ) : (
-                        <span className="text-ink-faint">Không giới hạn</span>
+                        <span className="text-[var(--text-faint)]">Không giới hạn</span>
                       )}
                     </td>
-                    <td className="px-5 py-3.5 text-ink-soft">{p['shared-users'] || '1'}</td>
-                    <td className="px-5 py-3.5 text-ink-soft">{p['idle-timeout'] || '—'}</td>
-                    <td className="px-5 py-3.5 text-ink-soft">
+                    <td className="font-mono text-xs text-[var(--text-dim)]">{p['shared-users'] || '1'}</td>
+                    <td className="font-mono text-xs text-[var(--text-dim)]">{p['idle-timeout'] || '—'}</td>
+                    <td>
                       {p['add-mac-cookie'] === 'true' ? (
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-primary-soft/60 px-2 py-0.5 text-xs font-semibold text-primary-deep">
-                          <span>✓</span> {p['mac-cookie-timeout'] || 'Bật'}
+                        <span className="sk-pill sk-pill--green text-[10px] py-0 px-1.5">
+                          <span className="sk-pill__dot" /> {p['mac-cookie-timeout'] || 'Bật'}
                         </span>
                       ) : (
-                        <span className="text-xs text-ink-faint">Tắt</span>
+                        <span className="font-mono text-xs text-[var(--text-faint)]">Tắt</span>
                       )}
                     </td>
-                    <td className="px-5 py-3.5 text-right">
+                    <td className="text-right">
                       {canManageProfiles ? (
-                        <>
-                          <button onClick={() => openEdit(p)} className="btn-ghost px-3 py-1.5 text-xs">
+                        <div className="flex items-center justify-end gap-1.5 font-mono text-xs">
+                          <button onClick={() => openEdit(p)} className="btn btn-secondary btn-sm h-7 px-2 text-[11px]">
                             Sửa
                           </button>
                           <button
                             onClick={() => handleDelete(p)}
                             disabled={busyId === p['.id'] || p.default === 'true'}
-                            className="ml-2 rounded-lg px-3 py-1.5 text-xs font-semibold text-danger transition hover:bg-danger-soft disabled:cursor-not-allowed disabled:opacity-40"
+                            className="btn btn-ghost btn-sm h-7 px-2 text-[11px] text-[var(--red)] hover:bg-[var(--red-bg)] disabled:opacity-30"
                             title={p.default === 'true' ? 'Không xóa được hồ sơ mặc định' : undefined}
                           >
-                            {busyId === p['.id'] ? 'Đang xóa…' : 'Xóa'}
+                            {busyId === p['.id'] ? '…' : 'Xóa'}
                           </button>
-                        </>
+                        </div>
                       ) : (
-                        <span className="rounded-md bg-ink/5 px-2.5 py-1 text-xs italic text-ink-faint">
-                          Chỉ xem
+                        <span className="font-mono text-xs text-[var(--text-faint)]">
+                          READ ONLY
                         </span>
                       )}
                     </td>
@@ -256,25 +240,26 @@ export default function ProfilesPage() {
           </div>
         </div>
       )}
-{/* Modal tạo / sửa hồ sơ */}
+
+      {/* Modal tạo / sửa hồ sơ */}
       <Modal
         open={formOpen}
         title={editing ? `Sửa hồ sơ "${editing.name}"` : 'Thêm hồ sơ mới'}
         onClose={() => setFormOpen(false)}
         footer={
           <>
-            <button onClick={() => setFormOpen(false)} className="btn-ghost px-4 py-2 text-sm">
+            <button onClick={() => setFormOpen(false)} className="btn btn-secondary btn-sm">
               Hủy
             </button>
-            <button onClick={handleSubmit} disabled={formBusy} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
+            <button onClick={handleSubmit} disabled={formBusy} className="btn btn-primary btn-sm">
               {formBusy ? 'Đang lưu…' : editing ? 'Cập nhật' : 'Tạo hồ sơ'}
             </button>
           </>
         }
       >
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {formError && (
-            <div className="rounded-xl bg-danger-soft px-4 py-2.5 text-sm font-medium text-danger">
+            <div className="rounded-[var(--radius-sm)] bg-[var(--red-bg)] border border-[rgba(251,111,111,0.3)] p-2.5 text-xs font-medium text-[var(--red)]">
               {formError}
             </div>
           )}
@@ -283,7 +268,7 @@ export default function ProfilesPage() {
             <input
               id="profile-name"
               name="name"
-              className={inputCls}
+              className="form-input"
               value={form.name}
               onChange={(e) => set('name', e.target.value)}
               placeholder="vd: khach-4h"
@@ -292,12 +277,12 @@ export default function ProfilesPage() {
             />
           </Field>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <Field label="Giới hạn tốc độ (rate-limit)" hint="vd: 10M/10M, 5M/2M">
               <input
                 id="profile-rate"
                 name="rate-limit"
-                className={inputCls}
+                className="form-input"
                 value={form['rate-limit']}
                 onChange={(e) => set('rate-limit', e.target.value)}
                 placeholder="vd: 10M/10M"
@@ -307,7 +292,7 @@ export default function ProfilesPage() {
               <input
                 id="profile-shared"
                 name="shared-users"
-                className={inputCls}
+                className="form-input"
                 value={form['shared-users']}
                 onChange={(e) => set('shared-users', e.target.value)}
                 placeholder="vd: 1"
@@ -315,12 +300,12 @@ export default function ProfilesPage() {
             </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <Field label="Idle timeout">
               <input
                 id="profile-idle"
                 name="idle-timeout"
-                className={inputCls}
+                className="form-input"
                 value={form['idle-timeout']}
                 onChange={(e) => set('idle-timeout', e.target.value)}
                 placeholder="vd: 5m, none"
@@ -330,7 +315,7 @@ export default function ProfilesPage() {
               <input
                 id="profile-keepalive"
                 name="keepalive-timeout"
-                className={inputCls}
+                className="form-input"
                 value={form['keepalive-timeout']}
                 onChange={(e) => set('keepalive-timeout', e.target.value)}
                 placeholder="vd: 5m"
@@ -338,22 +323,22 @@ export default function ProfilesPage() {
             </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <Field label="MAC cookie timeout">
               <input
                 id="profile-maccookie"
                 name="mac-cookie-timeout"
-                className={inputCls}
+                className="form-input"
                 value={form['mac-cookie-timeout']}
                 onChange={(e) => set('mac-cookie-timeout', e.target.value)}
                 placeholder="vd: 3d"
               />
             </Field>
-            <Field label="Address list" hint="Tên address-list để kiểm soát truy cập">
+            <Field label="Address list" hint="Tên address-list để kiểm soát">
               <input
                 id="profile-addresslist"
                 name="address-list"
-                className={inputCls}
+                className="form-input"
                 value={form['address-list']}
                 onChange={(e) => set('address-list', e.target.value)}
                 placeholder="vd: allowed-hotspot"
@@ -361,17 +346,13 @@ export default function ProfilesPage() {
             </Field>
           </div>
 
-          <label className="flex cursor-pointer items-center justify-between gap-3 text-sm text-ink-soft">
-            <span>Cho phép MAC cookie (đăng nhập tự động)</span>
-            <span className="relative inline-flex h-6 w-11 items-center rounded-full bg-ink/10">
-              <input
-                type="checkbox"
-                className="peer sr-only"
-                checked={form['add-mac-cookie'] === 'true'}
-                onChange={(e) => set('add-mac-cookie', e.target.checked ? 'true' : 'false')}
-              />
-              <span className="inline-block h-5 w-5 translate-x-0.5 transform rounded-full bg-white shadow transition peer-checked:translate-x-[22px] peer-checked:shadow-[0_0_12px_rgba(0,132,255,0.7)]" />
-            </span>
+          <label className="flex cursor-pointer items-center gap-2 pt-1">
+            <input
+              type="checkbox"
+              checked={form['add-mac-cookie'] === 'true'}
+              onChange={(e) => set('add-mac-cookie', e.target.checked ? 'true' : 'false')}
+            />
+            <span className="text-xs text-[var(--text-dim)]">Bật MAC cookie (đăng nhập tự động không hỏi lại)</span>
           </label>
         </form>
       </Modal>

@@ -7,25 +7,21 @@ import StatCard from '../components/StatCard.jsx';
 import Spinner from '../components/Spinner.jsx';
 import { formatBytes, formatDuration } from '../utils/format.js';
 
-const ACTIVE_REFRESH_MS = 15000; // phiên gần đây poll 15s; stats realtime qua SSE
+const ACTIVE_REFRESH_MS = 15000;
 
 export default function DashboardPage() {
   const [sseStats, setSseStats] = useState(null);
   const active = useApi(api.active);
 
-  // Nhận thống kê realtime (mỗi ~5s từ backend)
   useEventSource('/api/events', setSseStats);
-
   const stats = useApi(api.stats);
 
-  // Load dữ liệu ban đầu nếu SSE chưa kịp gửi
   useEffect(() => {
     const t = setInterval(() => {
       active.reload();
       if (!sseStats) stats.reload();
     }, ACTIVE_REFRESH_MS);
     return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sseStats]);
 
   const s = sseStats || stats.data;
@@ -33,138 +29,207 @@ export default function DashboardPage() {
   const errors = stats.error ? [stats.error] : s?.errors || [];
 
   return (
-    <div className="space-y-8">
-      <header>
-        <h1 className="text-3xl font-bold tracking-tight text-ink">
-          Tổng quan
-          <span className="text-primary">.</span>
-        </h1>
-        <p className="mt-1 text-sm text-ink-soft">
-          Bảng điều khiển quản trị hotspot MikroTik · cập nhật realtime (SSE)
-        </p>
-      </header>
-
-      {/* Cảnh báo lỗi */}
-      {errors.length > 0 && (
-        <div className="glass rounded-2xl border-amber-300/60 p-5 shadow-[0_0_24px_rgba(217,119,6,0.18)]">
-          <p className="flex items-center gap-2 font-semibold text-warning">
-            <span className="inline-block h-2 w-2 rounded-full bg-warning shadow-[0_0_8px_rgba(217,119,6,0.8)]" />
-            Không lấy được dữ liệu từ MikroTik.
+    <div className="space-y-6">
+      {/* Topbar */}
+      <div className="sk-topbar">
+        <div>
+          <h1 className="sk-title">Tổng quan Hotspot</h1>
+          <p className="sk-subtitle font-mono">
+            Bảng điều khiển giám sát MikroTik Hotspot · Realtime SSE Streams
           </p>
-          <ul className="mt-2 list-inside list-disc text-xs text-ink-soft">
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="sk-pill sk-pill--green">
+            <span className="sk-pill__dot" />
+            SSE LIVE
+          </span>
+          <button
+            onClick={() => {
+              active.reload();
+              stats.reload();
+            }}
+            className="btn btn-secondary btn-sm"
+          >
+            ⟳ Làm mới
+          </button>
+        </div>
+      </div>
+
+      {/* Error notification */}
+      {errors.length > 0 && (
+        <div className="rounded-[var(--radius-lg)] border border-[rgba(245,185,69,0.3)] bg-[var(--amber-bg)] p-4 text-xs">
+          <p className="flex items-center gap-2 font-semibold text-[var(--amber)]">
+            <span className="inline-block h-2 w-2 rounded-full bg-[var(--amber)] shadow-[0_0_8px_var(--amber)]" />
+            Không lấy được dữ liệu hoàn chỉnh từ MikroTik REST API.
+          </p>
+          <ul className="mt-2 list-inside list-disc text-[var(--text-dim)] space-y-0.5">
             {errors.map((e, i) => (
               <li key={i}>{e}</li>
             ))}
           </ul>
-          <p className="mt-2 text-xs text-ink-soft">
-            Kiểm tra{' '}
-            <code className="rounded bg-warning-soft px-1.5 py-0.5 font-mono text-warning">
-              backend/.env
-            </code>{' '}
-            và bật dịch vụ REST trên RouterOS 7.
-          </p>
-          <button onClick={stats.reload} className="btn-primary mt-3 px-4 py-2 text-xs">
-            ⟳ Thử lại
-          </button>
+          <div className="mt-3 flex items-center gap-2">
+            <button onClick={stats.reload} className="btn btn-primary btn-sm">
+              ⟳ Thử lại kết nối
+            </button>
+          </div>
         </div>
       )}
 
       {waiting ? (
-        <Spinner label="Đang tải dữ liệu…" />
+        <Spinner label="Đang đồng bộ dữ liệu Hotspot từ RouterOS…" />
       ) : s ? (
         <>
-          {/* Thẻ thống kê */}
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Tổng người dùng" value={s.users} icon="👥" />
-            <StatCard label="Phiên đang hoạt động" value={s.active} icon="📡" accent="magenta" />
+          {/* KPI Band */}
+          <div className="sk-kpiband">
             <StatCard
-              label="Hồ sơ (Profile)"
+              label="Tổng người dùng"
+              value={s.users}
+              icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+              }
+              accent="accent"
+            />
+            <StatCard
+              label="Phiên đang chạy"
+              value={s.active}
+              icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
+                  <path d="M5 12.55a11 11 0 0 1 14.08 0" />
+                  <path d="M1.42 9a16 16 0 0 1 21.16 0" />
+                  <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+                  <line x1="12" y1="20" x2="12.01" y2="20" />
+                </svg>
+              }
+              accent="green"
+            />
+            <StatCard
+              label="Hồ sơ gói cước"
               value={Array.isArray(s.profiles) ? s.profiles.length : '—'}
-              icon="🗂️"
+              icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
+                  <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+                  <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                </svg>
+              }
               accent="violet"
             />
             <StatCard
-              label="Router"
+              label="Router Host"
               value={s.router?.host || '—'}
               sub={s.router?.restBase}
-              icon="🖥️"
-              accent="amber"
+              icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
+                  <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+                  <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+                  <line x1="6" y1="6" x2="6.01" y2="6" />
+                  <line x1="6" y1="18" x2="6.01" y2="18" />
+                </svg>
+              }
+              accent="cyan"
             />
           </div>
 
-          {/* Phân bố người dùng theo profile + phiên gần đây */}
-          <div className="grid gap-6 lg:grid-cols-5">
-            <div className="glass glass-glow rounded-2xl p-6 lg:col-span-2">
-              <h2 className="label-caps mb-5">Phân bố theo profile</h2>
-              {Object.keys(s.usersByProfile || {}).length === 0 ? (
-                <p className="text-sm text-ink-faint">Chưa có dữ liệu.</p>
-              ) : (
-                <ul className="space-y-4">
-                  {Object.entries(s.usersByProfile).map(([profile, count], i) => {
-                    const max = Math.max(1, ...Object.values(s.usersByProfile));
-                    const colors = ['bg-primary', 'bg-secondary', 'bg-tertiary', 'bg-warning'];
-                    return (
-                      <li key={profile}>
-                        <div className="mb-1.5 flex items-center justify-between text-sm">
-                          <span className="font-semibold text-ink">{profile}</span>
-                          <span className="font-medium text-ink-soft">{count} user</span>
-                        </div>
-                        <div className="h-2.5 w-full overflow-hidden rounded-full bg-ink/5">
-                          <div
-                            className={`h-2.5 rounded-full ${colors[i % colors.length]} shadow-[0_0_10px_rgba(0,132,255,0.45)] transition-all duration-500`}
-                            style={{ width: `${(count / max) * 100}%` }}
-                          />
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
+          {/* Distribution & Recent Sessions */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+            {/* Phân bố theo profile (5 cols) */}
+            <div className="sk-card lg:col-span-5 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between border-b border-[var(--border-soft)] pb-3 mb-4">
+                  <h2 className="label-caps mb-0 text-xs">Phân bố người dùng theo Profile</h2>
+                  <span className="sk-state sk-state--accent">
+                    {Object.keys(s.usersByProfile || {}).length} GÓI
+                  </span>
+                </div>
 
-            <div className="glass glass-glow rounded-2xl p-6 lg:col-span-3">
-              <div className="mb-5 flex items-center justify-between">
-                <h2 className="label-caps">Phiên hoạt động gần đây</h2>
-                <Link
-                  to="/sessions"
-                  className="text-xs font-semibold text-primary transition hover:text-primary-deep"
-                >
-                  Xem tất cả →
+                {Object.keys(s.usersByProfile || {}).length === 0 ? (
+                  <p className="text-xs font-mono text-[var(--text-faint)] py-6 text-center">Chưa có dữ liệu phân bố.</p>
+                ) : (
+                  <div className="space-y-3.5">
+                    {Object.entries(s.usersByProfile).map(([profile, count]) => {
+                      const max = Math.max(1, ...Object.values(s.usersByProfile));
+                      const pct = Math.round((count / max) * 100);
+                      return (
+                        <div key={profile} className="space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-mono font-semibold text-[var(--text)]">{profile}</span>
+                            <span className="font-mono text-[var(--text-dim)]">{count} user</span>
+                          </div>
+                          <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--surface-3)]">
+                            <div
+                              className="h-full rounded-full bg-[var(--accent)] transition-all duration-500"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-[var(--border-soft)] text-right">
+                <Link to="/profiles" className="text-xs font-mono text-[var(--accent-bright)] hover:underline">
+                  Quản lý tất cả hồ sơ →
                 </Link>
               </div>
-              {active.error ? (
-                <p className="text-sm text-danger">{active.error}</p>
-              ) : active.loading && !active.data ? (
-                <Spinner />
-              ) : active.data?.length === 0 ? (
-                <p className="text-sm text-ink-faint">Không có phiên nào đang hoạt động.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="glass-table w-full text-left text-sm">
-                    <thead>
-                      <tr className="label-caps">
-                        <th className="rounded-l-lg px-3 py-3 font-semibold">Người dùng</th>
-                        <th className="px-3 py-3 font-semibold">IP</th>
-                        <th className="px-3 py-3 font-semibold">Thời gian</th>
-                        <th className="rounded-r-lg px-3 py-3 text-right font-semibold">Dữ liệu</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-ink/5">
-                      {(active.data || []).slice(0, 8).map((a) => (
-                        <tr key={a['.id']}>
-                          <td className="py-3 font-semibold text-ink">{a.user}</td>
-                          <td className="py-3 font-medium text-ink-soft">{a.ip}</td>
-                          <td className="py-3 text-ink-soft">{formatDuration(a.uptime)}</td>
-                          <td className="py-3 text-right font-medium text-ink-soft">
-                            <span className="text-primary">{formatBytes(a['bytes-in'])}</span> ↓ /{' '}
-                            <span className="text-secondary">{formatBytes(a['bytes-out'])}</span> ↑
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            </div>
+
+            {/* Phiên hoạt động gần đây (7 cols) */}
+            <div className="sk-card lg:col-span-7 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between border-b border-[var(--border-soft)] pb-3 mb-4">
+                  <h2 className="label-caps mb-0 text-xs">Phiên hoạt động gần đây</h2>
+                  <Link
+                    to="/sessions"
+                    className="text-xs font-mono text-[var(--accent-bright)] hover:underline"
+                  >
+                    Xem tất cả ({active.data?.length || 0}) →
+                  </Link>
                 </div>
-              )}
+
+                {active.error ? (
+                  <p className="text-xs text-[var(--red)]">{active.error}</p>
+                ) : active.loading && !active.data ? (
+                  <Spinner size="sm" />
+                ) : active.data?.length === 0 ? (
+                  <p className="text-xs font-mono text-[var(--text-faint)] py-8 text-center">
+                    Không có phiên nào đang hoạt động lúc này.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="sk-dtable">
+                      <thead>
+                        <tr>
+                          <th>Người dùng</th>
+                          <th>Địa chỉ IP</th>
+                          <th>Thời gian</th>
+                          <th className="text-right">Dung lượng ↓ / ↑</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(active.data || []).slice(0, 6).map((a) => (
+                          <tr key={a['.id']}>
+                            <td className="font-semibold">{a.user}</td>
+                            <td className="font-mono text-xs text-[var(--text-dim)]">{a.ip}</td>
+                            <td className="font-mono text-xs text-[var(--text-faint)]">
+                              {formatDuration(a.uptime)}
+                            </td>
+                            <td className="text-right font-mono text-xs">
+                              <span className="text-[var(--cyan)]">{formatBytes(a['bytes-in'])}</span> ↓ /{' '}
+                              <span className="text-[var(--violet)]">{formatBytes(a['bytes-out'])}</span> ↑
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </>

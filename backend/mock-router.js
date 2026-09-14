@@ -122,6 +122,18 @@ const active = [
   },
 ];
 
+// RouterOS System Users (cho đăng nhập hệ thống)
+const systemUsers = [
+  { '.id': '*U1', name: 'admin', group: 'full', disabled: 'false', comment: 'Quản trị viên MikroTik' },
+  { '.id': '*U2', name: 'operator', group: 'write', disabled: 'false', comment: 'Kỹ thuật viên' },
+  { '.id': '*U3', name: 'viewer', group: 'read', disabled: 'false', comment: 'Người xem' },
+  { '.id': '*U2', name: 'user_api', group: 'full', disabled: 'false', comment: 'API Administrator' },
+  { '.id': '*U3', name: 'operator', group: 'write', disabled: 'false', comment: 'Kỹ thuật viên' },
+  { '.id': '*U4', name: 'viewer', group: 'read', disabled: 'false', comment: 'Người xem' },
+];
+
+app.get('/rest/user', (req, res) => res.json(systemUsers));
+
 // ----------------------------------------------------------------------------
 // Routes giả lập
 // ----------------------------------------------------------------------------

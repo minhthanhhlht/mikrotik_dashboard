@@ -419,3 +419,4 @@ export function executeMockProxmoxAction(type, vmid, action) {
 
   return { success: true, vmid, action, status: target.status };
 }
+

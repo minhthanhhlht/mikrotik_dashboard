@@ -3,8 +3,6 @@ import { api } from '../api/client.js';
 
 const CHECK_INTERVAL = 10000; // kiểm tra lại mỗi 10s
 
-// Hiển thị trạng thái kết nối thực tế tới router MikroTik
-// dựa trên /api/health (backend thực sự ping router qua REST).
 export default function ConnectionStatus() {
   const [status, setStatus] = useState('checking'); // checking | connected | offline
   const [host, setHost] = useState(null);
@@ -39,27 +37,25 @@ export default function ConnectionStatus() {
     };
   }, []);
 
-  // Đang kiểm tra (lần đầu)
   if (status === 'checking') {
     return (
-      <div className="flex items-center gap-2.5 rounded-xl bg-white/40 px-3.5 py-2.5">
-        <span className="h-2 w-2 animate-pulse rounded-full bg-ink-faint" />
-        <span className="text-xs font-medium text-ink-soft">Đang kiểm tra kết nối…</span>
+      <div className="flex items-center gap-2 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] px-3 py-2">
+        <span className="h-2 w-2 rounded-full bg-[var(--text-ghost)] animate-pulse" />
+        <span className="text-xs font-mono text-[var(--text-faint)]">Đang kiểm tra kết nối…</span>
       </div>
     );
   }
 
-  // Đã kết nối
   if (status === 'connected') {
     return (
-      <div className="flex items-center gap-2.5 rounded-xl bg-primary-soft/60 px-3.5 py-2.5">
-        <span className="neon-dot" />
+      <div className="flex items-center gap-2.5 rounded-lg bg-[var(--green-bg)] border border-[rgba(61,220,151,0.25)] px-3 py-2">
+        <span className="h-2 w-2 rounded-full bg-[var(--green)] shadow-[0_0_8px_var(--green)]" />
         <div className="min-w-0">
-          <div className="text-xs font-semibold text-primary-deep">
-            REST API đã kết nối
+          <div className="text-xs font-medium text-[var(--green)]">
+            REST API Connected
           </div>
           {host && (
-            <div className="truncate text-[10px] font-medium text-ink-soft">
+            <div className="truncate text-[11px] font-mono text-[var(--text-dim)]">
               {host}
               {latencyMs != null ? ` · ${latencyMs}ms` : ''}
             </div>
@@ -69,14 +65,13 @@ export default function ConnectionStatus() {
     );
   }
 
-  // Mất kết nối
   return (
-    <div className="flex items-center gap-2.5 rounded-xl bg-danger-soft/80 px-3.5 py-2.5">
-      <span className="neon-dot neon-dot-danger" />
+    <div className="flex items-center gap-2.5 rounded-lg bg-[var(--red-bg)] border border-[rgba(251,111,111,0.25)] px-3 py-2">
+      <span className="h-2 w-2 rounded-full bg-[var(--red)] shadow-[0_0_8px_var(--red)]" />
       <div className="min-w-0">
-        <div className="text-xs font-semibold text-danger">Mất kết nối MikroTik</div>
-        <div className="truncate text-[10px] font-medium text-danger/70">
-          {error || 'Không thể kết nối router'}
+        <div className="text-xs font-medium text-[var(--red)]">Mất kết nối Router</div>
+        <div className="truncate text-[10px] font-mono text-[var(--text-faint)]">
+          {error || 'Không thể kết nối REST'}
         </div>
       </div>
     </div>
