@@ -55,8 +55,8 @@ export const api = {
   health: () => request('/health'),
 
   // Auth & Profile info
-  login: (username, password) =>
-    request('/auth/login', { method: 'POST', body: { username, password } }),
+  login: (username, password, rememberMe = true) =>
+    request('/auth/login', { method: 'POST', body: { username, password, rememberMe } }),
   logout: () => request('/auth/logout', { method: 'POST' }),
   me: () => request('/auth/me'),
 

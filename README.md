@@ -711,6 +711,22 @@ curl -u admin:matkhau http://192.168.88.1/rest/ip/hotspot/user
    - Xác thực dữ liệu thực tế từ Router MikroTik `192.168.20.1`: Hiển thị chính xác 2 thiết bị `MTDD` đang nhận IP DHCP (`192.168.30.252` và `192.168.20.254`).
    - `npm run build` thành công 100%.
 
+### Phiên 34 (2026-09-14) — Tích Hợp Ghi Nhớ Đăng Nhập 3 Ngày & Lưu Trữ Phiên Bền Vững (Remember Me - 3 Days)
+1. **Kiến Trúc Xác Thực Bền Vững (Session Persistence & Expiration)**:
+   - **Lưu trữ phiên tập trung (`backend/data/sessions.json`)**: Backend tự động đồng bộ Map phiên đăng nhập vào file `sessions.json` trên ổ cứng mỗi khi có đăng nhập (`login`) hoặc đăng xuất (`logout`), bảo toàn phiên đăng nhập kể cả khi khởi động lại server Node.js.
+   - **Thời gian sống phiên 3 ngày (`THREE_DAYS_MS = 259,200,000 ms`)**:
+     - Khi người dùng đăng nhập thành công với tùy chọn ghi nhớ, backend tạo session có `expiresAt = Date.now() + 3 ngày` và `rememberMe: true`.
+     - Middleware `requireAuth` kiểm tra hạn token thời gian thực: Nếu quá 3 ngày không hoạt động, session tự động bị xóa khỏi bộ nhớ và ổ cứng, trả về lỗi `401 Phiên đăng nhập đã hết hạn sau 3 ngày`.
+     - API `/api/auth/me` trả về chi tiết thông tin tài khoản và thời điểm hết hạn `expiresAt`.
+2. **Nâng Cấp Giao Diện & Client Auth Flow**:
+   - **Giao diện Đăng nhập (`LoginPage.jsx`)**: Bổ sung checkbox tùy chọn `Ghi nhớ đăng nhập (3 ngày)` (mặc định tích chọn) theo chuẩn thiết kế ServerKit.
+   - **Tự động phục hồi phiên (`useAuth.jsx` & `client.js`)**:
+     - Lưu `hs_token_expires_at` cùng với `hs_auth_token` vào `localStorage`.
+     - Khi mở lại trình duyệt, ứng dụng tự động kiểm tra thời gian hết hạn; nếu còn trong vòng 3 ngày, client tự động gọi `/api/auth/me` để nạp phiên và cho phép người dùng vào thẳng trang Dashboard mà không cần đăng nhập lại.
+3. **Kiểm Thử & Xác Nhận**:
+   - Đã kiểm tra thực tế trên trình duyệt: Đăng nhập tài khoản quản trị `user_api`, xác nhận file `backend/data/sessions.json` ghi nhận thời gian hết hạn đúng 72 giờ (3 ngày) tiếp theo.
+   - `npm run build` hoàn thành nhanh chóng (~600ms), không có bất kỳ lỗi cú pháp nào.
+
 ---
 
 ```bash

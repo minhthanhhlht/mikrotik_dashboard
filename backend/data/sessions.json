@@ -1,0 +1,13 @@
+[
+  {
+    "token": "tk_dbb5ikoossmmu1f53wt",
+    "id": "*2",
+    "username": "user_api",
+    "group": "full",
+    "role": "admin",
+    "fullName": "user_api",
+    "createdAt": 1789400978957,
+    "expiresAt": 1789660178957,
+    "rememberMe": true
+  }
+]

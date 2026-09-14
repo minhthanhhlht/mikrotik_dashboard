@@ -36,17 +36,28 @@ export function AuthProvider({ children }) {
     }
   });
 
-  const [authChecked, setAuthChecked] = useState(true);
+  const [expiresAt, setExpiresAt] = useState(() => {
+    try {
+      const exp = localStorage.getItem('hs_token_expires_at');
+      return exp ? Number(exp) : null;
+    } catch {
+      return null;
+    }
+  });
 
-  const login = useCallback(async (username, password) => {
-    const res = await api.login(username, password);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  const login = useCallback(async (username, password, rememberMe = true) => {
+    const res = await api.login(username, password, rememberMe);
     const uName = res.username || username;
     const uGroup = res.group || 'full';
     const uRole = res.role || 'admin';
     const uFull = res.fullName || uName;
+    const exp = res.expiresAt || (Date.now() + 3 * 24 * 60 * 60 * 1000);
 
     try {
       localStorage.setItem('hs_token', res.token);
+      localStorage.setItem('hs_token_expires_at', String(exp));
       localStorage.setItem('hs_user', uName);
       localStorage.setItem('hs_group', uGroup);
       localStorage.setItem('hs_role', uRole);
@@ -59,6 +70,7 @@ export function AuthProvider({ children }) {
     setGroup(uGroup);
     setRole(uRole);
     setFullName(uFull);
+    setExpiresAt(exp);
     setAuthChecked(true);
     return res;
   }, []);
@@ -71,6 +83,7 @@ export function AuthProvider({ children }) {
     }
     try {
       localStorage.removeItem('hs_token');
+      localStorage.removeItem('hs_token_expires_at');
       localStorage.removeItem('hs_user');
       localStorage.removeItem('hs_group');
       localStorage.removeItem('hs_role');
@@ -82,11 +95,22 @@ export function AuthProvider({ children }) {
     setGroup('read');
     setRole('viewer');
     setFullName('');
+    setExpiresAt(null);
   }, []);
 
-  // Fetch current me profile info on init if logged in
+  // Kiểm tra tính hợp lệ và hạn sử dụng 3 ngày khi khởi tạo ứng dụng
   useEffect(() => {
     const token = localStorage.getItem('hs_token');
+    const expStr = localStorage.getItem('hs_token_expires_at');
+    const expTime = expStr ? Number(expStr) : null;
+
+    // Nếu token đã hết hạn 3 ngày -> tự động đăng xuất
+    if (token && expTime && Date.now() > expTime) {
+      logout();
+      setAuthChecked(true);
+      return;
+    }
+
     if (token) {
       api
         .me()
@@ -96,17 +120,22 @@ export function AuthProvider({ children }) {
             setGroup(res.user.group || 'read');
             setRole(res.user.role || 'viewer');
             setFullName(res.user.fullName || res.user.username);
-            localStorage.setItem('hs_user', res.user.username);
-            localStorage.setItem('hs_group', res.user.group || 'read');
-            localStorage.setItem('hs_role', res.user.role || 'viewer');
-            localStorage.setItem('hs_fullname', res.user.fullName || res.user.username);
+            if (res.user.expiresAt) {
+              setExpiresAt(res.user.expiresAt);
+              localStorage.setItem('hs_token_expires_at', String(res.user.expiresAt));
+            }
           }
         })
         .catch(() => {
-          /* ignore */
+          logout();
+        })
+        .finally(() => {
+          setAuthChecked(true);
         });
+    } else {
+      setAuthChecked(true);
     }
-  }, []);
+  }, [logout]);
 
   const isAdmin = role === 'admin' || group === 'full';
   const isOperator = role === 'operator' || group === 'write';

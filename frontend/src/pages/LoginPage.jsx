@@ -9,6 +9,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -17,7 +18,7 @@ export default function LoginPage() {
     setBusy(true);
     setError('');
     try {
-      const res = await login(username.trim(), password);
+      const res = await login(username.trim(), password, rememberMe);
       toast.success(`Chào mừng ${res?.fullName || res?.username || username}!`, 'Đăng nhập thành công');
       navigate('/', { replace: true });
     } catch (err) {
@@ -86,6 +87,18 @@ export default function LoginPage() {
               placeholder="••••••••"
               autoComplete="current-password"
             />
+          </div>
+
+          <div className="flex items-center justify-between py-1">
+            <label className="flex items-center gap-2 cursor-pointer text-xs font-mono text-[var(--text-dim)] hover:text-[var(--text)] select-none">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="cursor-pointer"
+              />
+              <span>Ghi nhớ đăng nhập (3 ngày)</span>
+            </label>
           </div>
 
           <button

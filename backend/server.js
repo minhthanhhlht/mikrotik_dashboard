@@ -153,10 +153,46 @@ function mapRoleToGroup(role) {
   return 'write';
 }
 
-const tokens = new Map(); // token -> { id, username, group, role, fullName }
+const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000; // 3 ngày (259,200,000 ms)
+const SESSIONS_FILE = path.join(__dirname, 'data', 'sessions.json');
+
+const tokens = new Map(); // token -> { id, username, group, role, fullName, createdAt, expiresAt }
+
+function loadSessions() {
+  try {
+    if (fs.existsSync(SESSIONS_FILE)) {
+      const raw = fs.readFileSync(SESSIONS_FILE, 'utf-8');
+      const list = JSON.parse(raw);
+      const now = Date.now();
+      if (Array.isArray(list)) {
+        list.forEach((item) => {
+          if (item.token && item.expiresAt && item.expiresAt > now) {
+            tokens.set(item.token, item);
+          }
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('[sessions] Không thể đọc sessions.json:', err.message);
+  }
+}
+
+function saveSessions() {
+  try {
+    const list = Array.from(tokens.entries()).map(([token, session]) => ({
+      token,
+      ...session,
+    }));
+    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(list, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[sessions] Không thể lưu sessions.json:', err.message);
+  }
+}
+
+loadSessions();
 
 // ----------------------------------------------------------------------------
-// Auth & RBAC middleware (Xác thực qua Session Token cấp từ MikroTik)
+// Auth & RBAC middleware (Xác thực qua Session Token 3 ngày cấp từ MikroTik)
 // ----------------------------------------------------------------------------
 function requireAuth(req, res, next) {
   const h = req.headers['x-auth-token'];
@@ -165,6 +201,11 @@ function requireAuth(req, res, next) {
   }
   const session = tokens.get(h);
   if (session) {
+    if (session.expiresAt && Date.now() > session.expiresAt) {
+      tokens.delete(h);
+      saveSessions();
+      return res.status(401).json({ error: 'Phiên đăng nhập đã hết hạn (quá 3 ngày). Vui lòng đăng nhập lại.' });
+    }
     req.user = session;
     return next();
   }
@@ -188,7 +229,7 @@ function requireRole(allowedRoles = []) {
 // Xác thực đăng nhập thuần túy với MikroTik RouterOS (/user)
 // ----------------------------------------------------------------------------
 app.post('/api/auth/login', async (req, res) => {
-  const { username = '', password = '' } = req.body || {};
+  const { username = '', password = '', rememberMe = true } = req.body || {};
   const userTrim = username.trim();
   if (!userTrim) {
     return res.status(400).json({ error: 'Vui lòng nhập tên tài khoản MikroTik.' });
@@ -220,16 +261,22 @@ app.post('/api/auth/login', async (req, res) => {
       const role = mapGroupToRole(group);
       const fullName = current?.comment || current?.name || userTrim;
 
-      const token = `tk_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+      const now = Date.now();
+      const expiresAt = now + (rememberMe !== false ? THREE_DAYS_MS : 24 * 60 * 60 * 1000);
+      const token = `tk_${Math.random().toString(36).slice(2)}${now.toString(36)}`;
       const session = {
         id: current?.['.id'] || `usr_${userTrim}`,
         username: current?.name || userTrim,
         group,
         role,
         fullName,
+        createdAt: now,
+        expiresAt,
+        rememberMe: rememberMe !== false,
       };
       tokens.set(token, session);
-      return res.json({ ok: true, token, ...session });
+      saveSessions();
+      return res.json({ ok: true, token, expiresAt, ...session });
     }
 
     if (mtikRes.status === 401 || mtikRes.status === 403) {
@@ -246,7 +293,10 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.post('/api/auth/logout', (req, res) => {
   const h = req.headers['x-auth-token'];
-  if (h) tokens.delete(h);
+  if (h) {
+    tokens.delete(h);
+    saveSessions();
+  }
   res.json({ ok: true });
 });
 
