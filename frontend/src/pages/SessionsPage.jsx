@@ -20,14 +20,17 @@ export default function SessionsPage() {
   const [hosts, setHosts] = useState([]);
   const [leases, setLeases] = useState([]);
 
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Tải dữ liệu toàn bộ từ Router
-  async function loadAllData() {
-    setLoading(true);
+  // Tải dữ liệu toàn bộ từ Router (cập nhật êm mượt, không nháy trang)
+  async function loadAllData(isManual = false) {
+    if (isManual) {
+      setRefreshing(true);
+    }
     setError('');
     try {
       const [actData, hostData, leaseData] = await Promise.all([
@@ -41,13 +44,14 @@ export default function SessionsPage() {
     } catch (err) {
       setError(err.message || 'Không thể đồng bộ dữ liệu từ Router.');
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
+      setRefreshing(false);
     }
   }
 
   useEffect(() => {
-    loadAllData();
-    const t = setInterval(loadAllData, REFRESH_MS);
+    loadAllData(false);
+    const t = setInterval(() => loadAllData(false), REFRESH_MS);
     return () => clearInterval(t);
   }, []);
 
@@ -163,8 +167,13 @@ export default function SessionsPage() {
         </div>
 
         <div className="flex items-center gap-2.5">
-          <button onClick={loadAllData} disabled={loading} className="btn btn-secondary btn-sm">
-            <span className={loading ? 'animate-spin' : ''}>⟳</span> Làm mới ngay
+          <button
+            onClick={() => loadAllData(true)}
+            disabled={refreshing || initialLoading}
+            className="btn btn-secondary btn-sm"
+          >
+            <span className={refreshing ? 'animate-spin inline-block' : 'inline-block'}>⟳</span>{' '}
+            {refreshing ? 'Đang cập nhật…' : 'Làm mới ngay'}
           </button>
         </div>
       </div>
@@ -176,7 +185,7 @@ export default function SessionsPage() {
               <p className="font-semibold">⚠ Không thể lấy danh sách thiết bị từ router.</p>
               <p className="mt-1 text-[var(--text-dim)]">{error}</p>
             </div>
-            <button onClick={loadAllData} className="btn btn-danger btn-sm">
+            <button onClick={() => loadAllData(true)} className="btn btn-danger btn-sm">
               ⟳ Thử lại
             </button>
           </div>
@@ -220,7 +229,7 @@ export default function SessionsPage() {
           </div>
         </div>
 
-        {loading && !error ? (
+        {initialLoading && sessions.length === 0 && hosts.length === 0 && leases.length === 0 && !error ? (
           <div className="p-16 flex justify-center">
             <Spinner label="Đang đồng bộ dữ liệu thiết bị từ router MikroTik…" />
           </div>
