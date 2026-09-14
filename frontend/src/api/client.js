@@ -104,10 +104,16 @@ export const api = {
   updateSettings: (payload) =>
     request('/settings', { method: 'PUT', body: payload }),
 
-  // Phiên hoạt động
+  // Phiên hoạt động & Thiết bị kết nối Router
   active: () => request('/active'),
   disconnect: (id) =>
     request(`/active/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  hosts: () => request('/hosts'),
+  deleteHost: (id) =>
+    request(`/hosts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  dhcpLeases: () => request('/dhcp/leases'),
+  deleteDhcpLease: (id) =>
+    request(`/dhcp/leases/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   // Sao lưu & Xuất cấu hình RouterOS
   getRouterBackups: () => request('/router/backups'),

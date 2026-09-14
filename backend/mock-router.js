@@ -232,6 +232,132 @@ app.delete('/rest/ip/hotspot/active/:id', (req, res) => {
 });
 
 // ----------------------------------------------------------------------------
+// Hotspot Hosts (/ip/hotspot/host) & DHCP Leases (/ip/dhcp-server/lease)
+// ----------------------------------------------------------------------------
+const mockHosts = [
+  mk({
+    mac_address: 'AA:BB:CC:DD:EE:01',
+    address: '192.168.88.15',
+    'to-address': '192.168.88.15',
+    server: 'hotspot1',
+    'bridge-port': 'wlan1',
+    uptime: '00:12:34',
+    'idle-time': '00:00:07',
+    'bytes-in': 5234123,
+    'bytes-out': 88219213,
+    authorized: 'true',
+    bypassed: 'false',
+    comment: 'iPhone 15 Pro',
+  }),
+  mk({
+    mac_address: 'AA:BB:CC:DD:EE:02',
+    address: '192.168.88.22',
+    'to-address': '192.168.88.22',
+    server: 'hotspot1',
+    'bridge-port': 'ether2',
+    uptime: '1d02:12:01',
+    'idle-time': '00:01:02',
+    'bytes-in': 145223489,
+    'bytes-out': 2904412234,
+    authorized: 'true',
+    bypassed: 'false',
+    comment: 'MacBook Air M3',
+  }),
+  mk({
+    mac_address: 'AA:BB:CC:DD:EE:03',
+    address: '192.168.88.199',
+    'to-address': '192.168.88.199',
+    server: 'hotspot1',
+    'bridge-port': 'wlan1',
+    uptime: '00:00:11',
+    'idle-time': '00:00:00',
+    'bytes-in': 40550,
+    'bytes-out': 2140,
+    authorized: 'false',
+    bypassed: 'false',
+    comment: 'Samsung Galaxy S24 (Chưa login)',
+  }),
+  mk({
+    mac_address: '00:11:22:33:44:55',
+    address: '192.168.88.50',
+    'to-address': '192.168.88.50',
+    server: 'hotspot1',
+    'bridge-port': 'ether3',
+    uptime: '5d14:20:00',
+    'idle-time': '00:00:05',
+    'bytes-in': 89123000,
+    'bytes-out': 12045000,
+    authorized: 'true',
+    bypassed: 'true',
+    comment: 'Smart TV Phòng Khách (Bypass MAC)',
+  }),
+];
+
+const mockDhcpLeases = [
+  mk({
+    address: '192.168.88.15',
+    'mac-address': 'AA:BB:CC:DD:EE:01',
+    'host-name': 'iPhone-15-Pro',
+    server: 'dhcp1',
+    status: 'bound',
+    'last-seen': '2s',
+    'expires-after': '23h50m',
+    dynamic: 'true',
+  }),
+  mk({
+    address: '192.168.88.22',
+    'mac-address': 'AA:BB:CC:DD:EE:02',
+    'host-name': 'MacBook-Air-M3',
+    server: 'dhcp1',
+    status: 'bound',
+    'last-seen': '10s',
+    'expires-after': '20h15m',
+    dynamic: 'true',
+  }),
+  mk({
+    address: '192.168.88.199',
+    'mac-address': 'AA:BB:CC:DD:EE:03',
+    'host-name': 'Galaxy-S24-Ultra',
+    server: 'dhcp1',
+    status: 'bound',
+    'last-seen': '1s',
+    'expires-after': '23h59m',
+    dynamic: 'true',
+  }),
+  mk({
+    address: '192.168.88.50',
+    'mac-address': '00:11:22:33:44:55',
+    'host-name': 'LG-webOSTV',
+    server: 'dhcp1',
+    status: 'bound',
+    'last-seen': '5s',
+    'expires-after': '22h10m',
+    dynamic: 'true',
+  }),
+  mk({
+    address: '192.168.88.100',
+    'mac-address': '54:AF:97:12:34:56',
+    'host-name': 'Camera-San-Vuon',
+    server: 'dhcp1',
+    status: 'bound',
+    'last-seen': '3s',
+    'expires-after': '23h12m',
+    dynamic: 'false',
+    comment: 'Camera IP Cố định',
+  }),
+];
+
+app.get('/rest/ip/hotspot/host', (req, res) => res.json(mockHosts));
+app.delete('/rest/ip/hotspot/host/:id', (req, res) => {
+  const i = mockHosts.findIndex((h) => h['.id'] === req.params.id);
+  if (i === -1) return res.status(404).json({ error: 'not found' });
+  mockHosts.splice(i, 1);
+  res.status(200).json({});
+});
+
+app.get('/rest/ip/dhcp-server/lease', (req, res) => res.json(mockDhcpLeases));
+
+// ----------------------------------------------------------------------------
 // System Users (/user) - tài khoản quản trị MikroTik RouterOS
 // ----------------------------------------------------------------------------
 const routerUsers = [

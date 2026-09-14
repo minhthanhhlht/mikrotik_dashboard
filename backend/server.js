@@ -859,6 +859,96 @@ app.delete('/api/active/:id', requireRole(['admin', 'operator']), async (req, re
 });
 
 // ----------------------------------------------------------------------------
+// Tất cả thiết bị kết nối vào Router (/ip/hotspot/host & /ip/dhcp-server/lease)
+// ----------------------------------------------------------------------------
+app.get('/api/hosts', async (req, res) => {
+  try {
+    const [hostsRaw, leasesRaw] = await Promise.all([
+      mtik('GET', '/ip/hotspot/host').catch(() => []),
+      mtik('GET', '/ip/dhcp-server/lease').catch(() => []),
+    ]);
+
+    const hosts = Array.isArray(hostsRaw) ? hostsRaw : [];
+    const leases = Array.isArray(leasesRaw) ? leasesRaw : [];
+
+    // Tạo Map DHCP lease theo MAC để gán host-name chính xác cho host
+    const leaseMap = new Map();
+    leases.forEach((l) => {
+      const mac = String(l['mac-address'] || '').toUpperCase();
+      if (mac) leaseMap.set(mac, l);
+    });
+
+    const enrichedHosts = hosts.map((h) => {
+      const mac = String(h['mac-address'] || h.mac_address || '').toUpperCase();
+      const lease = leaseMap.get(mac);
+      return {
+        id: h['.id'] || mac,
+        macAddress: mac,
+        ipAddress: h.address || h['to-address'] || lease?.address || '',
+        toAddress: h['to-address'] || '',
+        server: h.server || lease?.server || 'hotspot',
+        bridgePort: h['bridge-port'] || '',
+        uptime: h.uptime || '',
+        idleTime: h['idle-time'] || '',
+        bytesIn: Number(h['bytes-in'] || 0),
+        bytesOut: Number(h['bytes-out'] || 0),
+        authorized: h.authorized === 'true' || h.authorized === true,
+        bypassed: h.bypassed === 'true' || h.bypassed === true,
+        hostName: lease?.['host-name'] || h.comment || '',
+        comment: h.comment || lease?.comment || '',
+        dynamic: lease?.dynamic !== 'false',
+        status: h.authorized === 'true' ? 'authorized' : h.bypassed === 'true' ? 'bypassed' : 'unauthorized',
+      };
+    });
+
+    res.json(enrichedHosts);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: 'Không thể lấy danh sách thiết bị kết nối: ' + err.message });
+  }
+});
+
+app.delete('/api/hosts/:id', requireRole(['admin', 'operator']), async (req, res) => {
+  try {
+    await mtik('DELETE', `/ip/hotspot/host/${encodeURIComponent(req.params.id)}`);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+// DHCP Leases trực tiếp
+app.get('/api/dhcp/leases', async (req, res) => {
+  try {
+    const list = await mtik('GET', '/ip/dhcp-server/lease');
+    const safe = (Array.isArray(list) ? list : []).map((l) => ({
+      id: l['.id'] || l['mac-address'],
+      ipAddress: l.address || '',
+      macAddress: l['mac-address'] || '',
+      hostName: l['host-name'] || '',
+      server: l.server || '',
+      status: l.status || 'bound',
+      lastSeen: l['last-seen'] || '',
+      expiresAfter: l['expires-after'] || '',
+      dynamic: l.dynamic !== 'false',
+      comment: l.comment || '',
+      disabled: l.disabled === 'true',
+    }));
+    res.json(safe);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: 'Không thể lấy danh sách DHCP Leases: ' + err.message });
+  }
+});
+
+app.delete('/api/dhcp/leases/:id', requireRole(['admin', 'operator']), async (req, res) => {
+  try {
+    await mtik('DELETE', `/ip/dhcp-server/lease/${encodeURIComponent(req.params.id)}`);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+// ----------------------------------------------------------------------------
 // Sao lưu & Xuất cấu hình RouterOS (/system/backup/save, /export, /file)
 // ----------------------------------------------------------------------------
 app.get('/api/router/backups', async (req, res) => {

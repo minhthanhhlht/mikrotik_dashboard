@@ -692,6 +692,25 @@ curl -u admin:matkhau http://192.168.88.1/rest/ip/hotspot/user
    - `npm run build` thành công 100% (dist bundle JS & CSS sạch sẽ).
    - Kiểm thử tương tác qua Chrome DevTools MCP: Đăng nhập `user_api`, mở trang `/hass`, nhận luồng SSE, chuyển đổi chu kỳ, kiểm tra bảng Add-ons và thực hiện lệnh dừng/chạy Add-on thành công.
 
+### Phiên 33 (2026-09-14) — Bổ Sung Giám Sát Chi Tiết Tất Cả Thiết Bị Kết Nối Router (Hotspot Hosts & DHCP Leases)
+1. **Kiến Trúc Tích Hợp Đa Nguồn Thiết Bị RouterOS**:
+   - **Endpoint Kết Nối Mới**:
+     - `GET /api/hosts`: Lấy danh sách thiết bị kết nối vào sóng WiFi/LAN từ `/ip/hotspot/host` kết hợp tên thiết bị thực tế (`host-name`) từ DHCP leases.
+     - `DELETE /api/hosts/:id`: Xóa thiết bị khỏi bảng Hotspot Host.
+     - `GET /api/dhcp/leases`: Lấy danh sách toàn bộ bản ghi cấp phát IP từ DHCP Server (`/ip/dhcp-server/lease`).
+     - `DELETE /api/dhcp/leases/:id`: Thu hồi địa chỉ IP đã cấp cho thiết bị.
+   - **Mock Engine & Router Thật**: Cập nhật cả `mock-router.js` và proxy `server.js` hỗ trợ đầy đủ các trường thông tin kỹ thuật (`macAddress`, `ipAddress`, `hostName`, `bridgePort`, `uptime`, `idleTime`, `bytesIn`, `bytesOut`, `status`, `expiresAfter`, `dynamic`).
+2. **Nâng Cấp Giao Diện Trang Phiên Hoạt Động (`frontend/src/pages/SessionsPage.jsx`)**:
+   - **Segmented Tab Switcher (`.sk-seg`)**: Cho phép chuyển đổi mượt mà giữa 3 chế độ xem:
+     - **⚡ Phiên Đăng Nhập (`/ip/hotspot/active`)**: Các thiết bị đã xác thực và có phiên Internet.
+     - **📱 Thiết Bị Kết Nối Router (`/ip/hotspot/host`)**: Tất cả các máy đang bắt WiFi hoặc cắm dây LAN (cả chưa login, đã login và Bypass MAC).
+     - **🌐 Cấp Phát DHCP (`/ip/dhcp-server/lease`)**: Xem toàn bộ thiết bị đã nhận IP từ DHCP Server, tên máy (`host-name`), kiểu cấp phát (Dynamic/Static) và thời gian hết hạn (`expires-after`).
+   - **Ô Tìm Kiếm Đa Năng**: Tìm kiếm theo Tên máy, IP, MAC Address hoặc Server.
+   - **Định Dạng Chuẩn ServerKit**: Bảng `.sk-dtable`, Status Pills (`.sk-pill.sk-pill--green`, `.sk-pill.sk-pill--amber`, `.sk-pill.sk-pill--cyan`), nút Thu hồi IP và Ngắt phiên an toàn.
+3. **Kiểm Thử**:
+   - Xác thực dữ liệu thực tế từ Router MikroTik `192.168.20.1`: Hiển thị chính xác 2 thiết bị `MTDD` đang nhận IP DHCP (`192.168.30.252` và `192.168.20.254`).
+   - `npm run build` thành công 100%.
+
 ---
 
 ```bash
