@@ -308,3 +308,4 @@ export function executeMockHassCoreAction(action) {
     throw new Error(`Hành động '${action}' không hợp lệ.`);
   }
 }
+
