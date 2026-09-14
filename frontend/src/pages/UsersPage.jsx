@@ -48,6 +48,8 @@ export default function UsersPage() {
   // --- State Người dùng (Users) ---
   const [search, setSearch] = useState('');
   const [profileFilter, setProfileFilter] = useState('');
+  const [showAllPasswords, setShowAllPasswords] = useState(false);
+  const [revealedPasswords, setRevealedPasswords] = useState(() => new Set());
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY);
@@ -71,10 +73,25 @@ export default function UsersPage() {
     return users.filter((u) => {
       if (profileFilter && profileOf(u) !== profileFilter) return false;
       if (!q) return true;
-      const hay = `${u.name || ''} ${u.comment || ''} ${u.email || ''}`.toLowerCase();
+      const hay = `${u.name || ''} ${u.password || ''} ${u.comment || ''} ${u.email || ''}`.toLowerCase();
       return hay.includes(q);
     });
   }, [users, search, profileFilter]);
+
+  function toggleRevealPassword(id) {
+    setRevealedPasswords((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function copyPassword(pass, userName) {
+    if (!pass) return;
+    navigator.clipboard.writeText(pass);
+    toast.success(`Đã sao chép mật khẩu của "${userName}"`, 'Đã sao chép');
+  }
 
   function openCreate() {
     setEditing(null);
@@ -87,7 +104,7 @@ export default function UsersPage() {
     setEditing(u);
     setForm({
       name: u.name || '',
-      password: '',
+      password: u.password || '',
       profile: profileOf(u),
       'limit-uptime': u['limit-uptime'] || '',
       'limit-bytes-total': u['limit-bytes-total'] || '',
@@ -553,6 +570,19 @@ export default function UsersPage() {
                         />
                       </th>
                       <th>Người dùng</th>
+                      <th>
+                        <div className="flex items-center gap-1.5">
+                          <span>Mật khẩu</span>
+                          <button
+                            type="button"
+                            onClick={() => setShowAllPasswords((v) => !v)}
+                            className="text-[10px] font-mono text-[var(--accent)] hover:underline opacity-80 hover:opacity-100"
+                            title={showAllPasswords ? 'Ẩn tất cả mật khẩu' : 'Hiện tất cả mật khẩu'}
+                          >
+                            {showAllPasswords ? 'Ẩn' : 'Hiện'}
+                          </button>
+                        </div>
+                      </th>
                       <th>Profile</th>
                       <th>Giới hạn thời gian</th>
                       <th>Giới hạn dung lượng</th>
@@ -563,7 +593,7 @@ export default function UsersPage() {
                   <tbody>
                     {filtered.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="py-12 text-center font-mono text-xs text-[var(--text-faint)]">
+                        <td colSpan={8} className="py-12 text-center font-mono text-xs text-[var(--text-faint)]">
                           Không có người dùng nào.
                         </td>
                       </tr>
@@ -585,6 +615,35 @@ export default function UsersPage() {
                           <div className="font-mono font-semibold text-[var(--text)]">{u.name}</div>
                           {u.comment && (
                             <div className="font-mono text-[11px] text-[var(--text-faint)]">{u.comment}</div>
+                          )}
+                        </td>
+                        <td>
+                          {u.password ? (
+                            <div className="inline-flex items-center gap-1.5 group">
+                              <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-[var(--surface-2)] border border-[var(--border-soft)] text-[var(--cyan)] select-all tracking-wider">
+                                {showAllPasswords || revealedPasswords.has(u['.id']) ? u.password : '••••••'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => toggleRevealPassword(u['.id'])}
+                                className="text-[11px] text-[var(--text-faint)] hover:text-[var(--text)] transition-colors p-0.5"
+                                title={revealedPasswords.has(u['.id']) || showAllPasswords ? 'Ẩn mật khẩu' : 'Xem mật khẩu'}
+                              >
+                                {revealedPasswords.has(u['.id']) || showAllPasswords ? '👁️' : '👁️‍🗨️'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => copyPassword(u.password, u.name)}
+                                className="text-[11px] text-[var(--text-faint)] hover:text-[var(--accent)] transition-colors p-0.5"
+                                title="Sao chép mật khẩu"
+                              >
+                                📋
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="font-mono text-[11px] text-[var(--text-faint)] italic">
+                              (Trống)
+                            </span>
                           )}
                         </td>
                         <td>
