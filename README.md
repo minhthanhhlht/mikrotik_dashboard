@@ -21,6 +21,10 @@ Trang **Dashboard quản trị user** cho **WiFi Hotspot của MikroTik** (Route
 >    - **BẮT BUỘC** suy nghĩ, rà soát và phân tích kỹ lưỡng các luồng dữ liệu (Data flow), chữ ký hàm (Function signature), kiểu dữ liệu trả về và trạng thái (State) trước khi sửa đổi bất kỳ đoạn code nào.
 >    - Tuyệt đối **KHÔNG** làm ảnh hưởng (breaking changes/side effects) đến các tính năng, luồng logic cũ đã hoạt động ổn định và thành công trước đó.
 >    - Luôn chạy kiểm thử (`npm run build`, API test scripts) và kiểm tra tương thích ngược sau mỗi lần chỉnh sửa.
+> 5. 🌐 **QUY TẮC KIỂM THỬ TRỰC TIẾP TRÊN COOLIFY (COOLIFY-ONLY LIVE TESTING POLICY)**:
+>    - **TUYỆT ĐỐI KHÔNG kiểm thử trên localhost / local dev server**.
+>    - Sau mỗi lần chỉnh sửa mã nguồn và kiểm tra `npm run build` local đạt 100%, **BẮT BUỘC commit & push lên GitHub nhánh `main`**, sau đó **gửi API trigger deploy lên Coolify** (`POST https://manage.mtdd.io.vn/api/v1/deploy?uuid=9bcvjdq9yixzdrzrpzxhi4mh`).
+>    - Sau khi Coolify build xong, sử dụng công cụ **Chrome DevTools MCP** kiểm thử giao diện, API, SSE và chụp ảnh màn hình xác nhận trực tiếp trên URL production: **`https://dashboard.mtdd.io.vn/`**.
 
 ---
 
