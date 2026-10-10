@@ -2325,8 +2325,9 @@ const HAS_BUILD = fs.existsSync(path.join(DIST, 'index.html'));
 if (HAS_BUILD) {
   app.use('/assets', express.static(path.join(DIST, 'assets'), { maxAge: '1y', immutable: true }));
   app.use(express.static(DIST, { maxAge: '1y', immutable: true, index: false }));
-  app.get('*', (req, res, next) => {
+  app.use((req, res, next) => {
     if (
+      req.method !== 'GET' ||
       req.path.startsWith('/api') ||
       req.path.startsWith('/assets') ||
       req.path.startsWith('/fonts') ||
