@@ -1,3 +1,62 @@
+
+// Danh sách Task Logs giả lập
+const mockTasksList = [
+  {
+    upid: 'UPID:mtdd:0000A411:000AC488:6ABD4332:vzstart:100:root@pam!token-dashboard:',
+    node: 'mtdd',
+    pid: 42001,
+    type: 'vzstart',
+    id: '100',
+    user: 'root@pam!token-dashboard',
+    starttime: Math.floor(Date.now() / 1000) - 120,
+    endtime: Math.floor(Date.now() / 1000) - 118,
+    status: 'OK',
+  },
+  {
+    upid: 'UPID:mtdd:0000A3CC:000AC2F0:6ABD432E:vzshutdown:100:root@pam!token-dashboard:',
+    node: 'mtdd',
+    pid: 41932,
+    type: 'vzshutdown',
+    id: '100',
+    user: 'root@pam!token-dashboard',
+    starttime: Math.floor(Date.now() / 1000) - 180,
+    endtime: Math.floor(Date.now() / 1000) - 175,
+    status: 'OK',
+  },
+  {
+    upid: 'UPID:mtdd:00008F21:0009B112:6ABD3F10:vzcreate:100:root@pam!token-dashboard:',
+    node: 'mtdd',
+    pid: 36641,
+    type: 'vzcreate',
+    id: '100',
+    user: 'root@pam!token-dashboard',
+    starttime: Math.floor(Date.now() / 1000) - 1800,
+    endtime: Math.floor(Date.now() / 1000) - 1765,
+    status: 'OK',
+  },
+  {
+    upid: 'UPID:mtdd:00007E12:0008A201:6ABD3E01:download:0:root@pam!token-dashboard:',
+    node: 'mtdd',
+    pid: 32274,
+    type: 'download',
+    id: '0',
+    user: 'root@pam!token-dashboard',
+    starttime: Math.floor(Date.now() / 1000) - 2400,
+    endtime: Math.floor(Date.now() / 1000) - 2310,
+    status: 'OK',
+  },
+  {
+    upid: 'UPID:mtdd:00005C29:00067812:6ABD3B55:qmstart:101:root@pam!token-dashboard:',
+    node: 'mtdd',
+    pid: 23593,
+    type: 'qmstart',
+    id: '101',
+    user: 'root@pam!token-dashboard',
+    starttime: Math.floor(Date.now() / 1000) - 3600,
+    endtime: Math.floor(Date.now() / 1000) - 3595,
+    status: 'OK',
+  },
+];
 /**
  * Mock Proxmox VE 8.x Hypervisor Engine
  * Mô phỏng chân thực các chỉ số tài nguyên, máy ảo KVM, container LXC, ZFS storage và Linux Network Bridges.
@@ -324,15 +383,34 @@ export function getMockProxmoxSummary() {
     };
   });
 
-  // Tính tổng băng thông mạng Proxmox
-  const totalNetIn = [...dynamicVms, ...dynamicLxcs].reduce((acc, item) => acc + (item.netin || 0), 0);
-  const totalNetOut = [...dynamicVms, ...dynamicLxcs].reduce((acc, item) => acc + (item.netout || 0), 0);
+  // Băng thông mạng Proxmox thời gian thực (Bridge & Physical NICs)
+  const baseRxBps = Math.round(2400000 + Math.sin(now / 4000) * 1200000 + currentCpu * 3500000);
+  const baseTxBps = Math.round(1800000 + Math.cos(now / 4500) * 900000 + currentCpu * 2500000);
+  const rxBytesPerSec = Math.max(102400, baseRxBps);
+  const txBytesPerSec = Math.max(81920, baseTxBps);
+  const rxBitsPerSec = rxBytesPerSec * 8;
+  const txBitsPerSec = txBytesPerSec * 8;
+  const rxMbps = Number((rxBitsPerSec / 1000000).toFixed(2));
+  const txMbps = Number((txBitsPerSec / 1000000).toFixed(2));
 
-  // Đếm VM/LXC
-  const runningVms = dynamicVms.filter((v) => v.status === 'running').length;
-  const runningLxcs = dynamicLxcs.filter((c) => c.status === 'running').length;
-  const totalGuests = dynamicVms.length + dynamicLxcs.length;
-  const totalRunning = runningVms + runningLxcs;
+  // Cảm biến phần cứng Proxmox (Nhiệt độ, Điện áp, Quạt tản nhiệt)
+  const cpuPercentage = Number((currentCpu * 100).toFixed(1));
+  const cpuTemp = Number((41.5 + (cpuPercentage / 100) * 26.0 + (Math.sin(now / 15000) * 1.5)).toFixed(1));
+  const mbTemp = Number((34.5 + (cpuPercentage / 100) * 10.0 + (Math.cos(now / 20000) * 0.8)).toFixed(1));
+  const voltage = Number((12.10 + (Math.sin(now / 30000) * 0.05)).toFixed(2));
+  const vcore = Number((1.08 + (cpuPercentage / 100) * 0.20).toFixed(2));
+  const fanSpeed = Math.round(1200 + (cpuPercentage / 100) * 1100);
+  const sensorStatus = cpuTemp > 80 ? 'CRITICAL' : cpuTemp > 65 ? 'WARM' : 'OPTIMAL';
+
+  const sensors = {
+    temperature: cpuTemp,
+    cpuTemp,
+    motherboardTemp: mbTemp,
+    voltage,
+    vcore,
+    fanSpeed,
+    status: sensorStatus,
+  };
 
   return {
     timestamp: now,
@@ -341,7 +419,8 @@ export function getMockProxmoxSummary() {
       ...nodeSpec,
       uptimeSeconds: uptime,
       cpuUsage: currentCpu,
-      cpuPercentage: Number((currentCpu * 100).toFixed(1)),
+      cpuPercentage,
+      sensors,
       memory: {
         total: nodeSpec.totalMemoryBytes,
         used: currentMem,
@@ -367,6 +446,7 @@ export function getMockProxmoxSummary() {
         percentage: 28.3,
       },
     },
+    sensors,
     counts: {
       totalGuests,
       totalRunning,
@@ -377,18 +457,19 @@ export function getMockProxmoxSummary() {
       lxcsRunning: runningLxcs,
     },
     traffic: {
-      rxBytesPerSec: Math.floor(totalNetIn / 8),
-      txBytesPerSec: Math.floor(totalNetOut / 8),
-      rxBitsPerSec: totalNetIn,
-      txBitsPerSec: totalNetOut,
-      rxMbps: Number((totalNetIn / 1000000).toFixed(2)),
-      txMbps: Number((totalNetOut / 1000000).toFixed(2)),
+      rxBytesPerSec,
+      txBytesPerSec,
+      rxBitsPerSec,
+      txBitsPerSec,
+      rxMbps,
+      txMbps,
     },
     vms: dynamicVms,
     lxcs: dynamicLxcs,
     guests: [...dynamicVms, ...dynamicLxcs].sort((a, b) => a.vmid - b.vmid),
     storage: storagePools,
     network: networkInterfaces,
+    tasks: mockTasksList,
   };
 }
 
@@ -420,3 +501,193 @@ export function executeMockProxmoxAction(type, vmid, action) {
   return { success: true, vmid, action, status: target.status };
 }
 
+/**
+ * Lấy VMID tiếp theo khả dụng
+ */
+export function getMockNextVmid() {
+  const allIds = [...vms.map((v) => v.vmid), ...lxcs.map((c) => c.vmid)];
+  const max = allIds.length > 0 ? Math.max(...allIds) : 100;
+  return max + 1;
+}
+
+/**
+ * Lấy danh sách template & ISO mẫu
+ */
+export function getMockTemplates() {
+  return [
+    { volid: 'local:iso/ubuntu-24.04-live-server-amd64.iso', format: 'iso', size: 2800000000, content: 'iso', description: 'Ubuntu Server 24.04 LTS' },
+    { volid: 'local:iso/debian-12.5.0-amd64-netinst.iso', format: 'iso', size: 650000000, content: 'iso', description: 'Debian 12 Netinst' },
+    { volid: 'local:iso/chr-7.16.1.iso', format: 'iso', size: 95000000, content: 'iso', description: 'MikroTik RouterOS 7.16 CHR' },
+    { volid: 'local:iso/Windows_Server_2022.iso', format: 'iso', size: 5100000000, content: 'iso', description: 'Windows Server 2022 Standard' },
+    { volid: 'local:vztmpl/ubuntu-24.04-standard_24.04-2_amd64.tar.zst', format: 'tar.zst', size: 145000000, content: 'vztmpl', description: 'Ubuntu 24.04 LXC Template' },
+    { volid: 'local:vztmpl/debian-12-standard_12.2-1_amd64.tar.zst', format: 'tar.zst', size: 125000000, content: 'vztmpl', description: 'Debian 12 LXC Template' },
+    { volid: 'local:vztmpl/alpine-3.20-default_20240606_amd64.tar.xz', format: 'tar.xz', size: 3500000, content: 'vztmpl', description: 'Alpine Linux 3.20 Minimal' },
+  ];
+}
+
+/**
+ * Thêm máy ảo VM mới (KVM)
+ */
+export function createMockVm(payload = {}) {
+  const vmid = Number(payload.vmid) || getMockNextVmid();
+  const exists = vms.find((v) => v.vmid === vmid) || lxcs.find((c) => c.vmid === vmid);
+  if (exists) {
+    throw new Error(`ID ${vmid} đã tồn tại trên Proxmox`);
+  }
+
+  const memoryMb = Number(payload.memory) || 2048;
+  const diskGb = Number(payload.disk) || 32;
+  const tags = typeof payload.tags === 'string' ? payload.tags.split(/[,;\s]+/).filter(Boolean) : Array.isArray(payload.tags) ? payload.tags : [];
+
+  const newVm = {
+    vmid,
+    name: payload.name || `VM-${vmid}`,
+    type: 'qemu',
+    os: payload.ostype || payload.os || 'Linux Guest',
+    status: payload.start ? 'running' : 'stopped',
+    cpus: Number(payload.cores || 2),
+    cpuUsage: payload.start ? 0.05 : 0,
+    maxmem: memoryMb * 1024 * 1024,
+    mem: payload.start ? memoryMb * 0.3 * 1024 * 1024 : 0,
+    disk: payload.start ? 2 * 1024 * 1024 * 1024 : 0,
+    maxdisk: diskGb * 1024 * 1024 * 1024,
+    netin: 0,
+    netout: 0,
+    diskread: 0,
+    diskwrite: 0,
+    uptime: payload.start ? 1 : 0,
+    description: payload.description || '',
+    ip: payload.ip || '',
+    tags,
+  };
+
+  vms.push(newVm);
+  return newVm;
+}
+
+/**
+ * Cập nhật cấu hình VM
+ */
+export function updateMockVm(vmid, payload = {}) {
+  const vm = vms.find((v) => v.vmid === Number(vmid));
+  if (!vm) throw new Error(`Không tìm thấy VM ID ${vmid}`);
+
+  if (payload.name) vm.name = payload.name;
+  if (payload.cores) vm.cpus = Number(payload.cores);
+  if (payload.memory) vm.maxmem = Number(payload.memory) * 1024 * 1024;
+  if (payload.description !== undefined) vm.description = payload.description;
+  if (payload.ip !== undefined) vm.ip = payload.ip;
+  if (payload.tags !== undefined) {
+    vm.tags = typeof payload.tags === 'string' ? payload.tags.split(/[,;\s]+/).filter(Boolean) : Array.isArray(payload.tags) ? payload.tags : [];
+  }
+
+  return vm;
+}
+
+/**
+ * Xóa VM
+ */
+export function deleteMockVm(vmid) {
+  const idx = vms.findIndex((v) => v.vmid === Number(vmid));
+  if (idx === -1) throw new Error(`Không tìm thấy VM ID ${vmid}`);
+  if (vms[idx].status === 'running') {
+    throw new Error(`VM ${vmid} đang chạy. Vui lòng dừng VM trước khi xóa.`);
+  }
+  const deleted = vms.splice(idx, 1)[0];
+  return { success: true, deleted };
+}
+
+/**
+ * Thêm Container LXC mới (CT)
+ */
+export function createMockLxc(payload = {}) {
+  const vmid = Number(payload.vmid) || getMockNextVmid();
+  const exists = vms.find((v) => v.vmid === vmid) || lxcs.find((c) => c.vmid === vmid);
+  if (exists) {
+    throw new Error(`ID ${vmid} đã tồn tại trên Proxmox`);
+  }
+
+  const memoryMb = Number(payload.memory) || 1024;
+  const diskGb = Number(payload.disk) || 8;
+  const tags = typeof payload.tags === 'string' ? payload.tags.split(/[,;\s]+/).filter(Boolean) : Array.isArray(payload.tags) ? payload.tags : [];
+
+  const newLxc = {
+    vmid,
+    name: payload.hostname || payload.name || `CT-${vmid}`,
+    type: 'lxc',
+    os: payload.ostemplate || payload.os || 'LXC Container',
+    status: payload.start ? 'running' : 'stopped',
+    cpus: Number(payload.cores || 1),
+    cpuUsage: payload.start ? 0.03 : 0,
+    maxmem: memoryMb * 1024 * 1024,
+    mem: payload.start ? memoryMb * 0.2 * 1024 * 1024 : 0,
+    disk: payload.start ? 1 * 1024 * 1024 * 1024 : 0,
+    maxdisk: diskGb * 1024 * 1024 * 1024,
+    netin: 0,
+    netout: 0,
+    diskread: 0,
+    diskwrite: 0,
+    uptime: payload.start ? 1 : 0,
+    description: payload.description || '',
+    ip: payload.ip || '',
+    tags,
+  };
+
+  lxcs.push(newLxc);
+  return newLxc;
+}
+
+/**
+ * Cập nhật cấu hình LXC
+ */
+export function updateMockLxc(vmid, payload = {}) {
+  const lxc = lxcs.find((c) => c.vmid === Number(vmid));
+  if (!lxc) throw new Error(`Không tìm thấy LXC ID ${vmid}`);
+
+  if (payload.hostname || payload.name) lxc.name = payload.hostname || payload.name;
+  if (payload.cores) lxc.cpus = Number(payload.cores);
+  if (payload.memory) lxc.maxmem = Number(payload.memory) * 1024 * 1024;
+  if (payload.description !== undefined) lxc.description = payload.description;
+  if (payload.ip !== undefined) lxc.ip = payload.ip;
+  if (payload.tags !== undefined) {
+    lxc.tags = typeof payload.tags === 'string' ? payload.tags.split(/[,;\s]+/).filter(Boolean) : Array.isArray(payload.tags) ? payload.tags : [];
+  }
+
+  return lxc;
+}
+
+/**
+ * Xóa LXC
+ */
+export function deleteMockLxc(vmid) {
+  const idx = lxcs.findIndex((c) => c.vmid === Number(vmid));
+  if (idx === -1) throw new Error(`Không tìm thấy LXC ID ${vmid}`);
+  if (lxcs[idx].status === 'running') {
+    throw new Error(`LXC ${vmid} đang chạy. Vui lòng dừng LXC trước khi xóa.`);
+  }
+  const deleted = lxcs.splice(idx, 1)[0];
+  return { success: true, deleted };
+}
+
+
+
+/**
+ * Lấy danh sách Task Logs giả lập
+ */
+export function getMockProxmoxTasks(limit = 50) {
+  return mockTasksList.slice(0, limit);
+}
+
+/**
+ * Xử lý tác vụ tắt/khởi động lại máy chủ vật lý Proxmox Node giả lập
+ */
+export function executeMockProxmoxNodeAction(command) {
+  const cleanCommand = command === 'reboot' ? 'reboot' : 'shutdown';
+  return {
+    success: true,
+    node: 'mtdd',
+    command: cleanCommand,
+    mode: 'mock',
+    result: `UPID:mtdd:0000B100:000B0000:6ABD4500:srv${cleanCommand}::root@pam!token-dashboard:`,
+  };
+}

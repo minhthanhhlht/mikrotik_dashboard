@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { useToast } from '../hooks/useToast.jsx';
+import { useLanguage } from '../context/LanguageContext.jsx';
 import Spinner from '../components/Spinner.jsx';
 import { formatBytes, formatDuration } from '../utils/format.js';
 
@@ -10,6 +11,7 @@ const REFRESH_MS = 15000;
 
 export default function SessionsPage() {
   const { isViewer } = useAuth();
+  const { language, t } = useLanguage();
   const toast = useToast();
 
   // Tab điều hướng: 'active' (Phiên đăng nhập) | 'hosts' (Tất cả thiết bị kết nối) | 'leases' (DHCP Leases)
@@ -42,7 +44,7 @@ export default function SessionsPage() {
       setHosts(Array.isArray(hostData) ? hostData : []);
       setLeases(Array.isArray(leaseData) ? leaseData : []);
     } catch (err) {
-      setError(err.message || 'Không thể đồng bộ dữ liệu từ Router.');
+      setError(err.message || 'Could not sync data from Router.');
     } finally {
       setInitialLoading(false);
       setRefreshing(false);
@@ -51,23 +53,23 @@ export default function SessionsPage() {
 
   useEffect(() => {
     loadAllData(false);
-    const t = setInterval(() => loadAllData(false), REFRESH_MS);
-    return () => clearInterval(t);
+    const intervalTimer = setInterval(() => loadAllData(false), REFRESH_MS);
+    return () => clearInterval(intervalTimer);
   }, []);
 
   // Thao tác ngắt phiên Hotspot
   async function handleDisconnectSession(s) {
     const ok = window.confirm(
-      `Ngắt kết nối phiên đăng nhập của "${s.user}" (${s.ip})?`
+      t('sessions.disconnectConfirm', { user: s.user, ip: s.ip })
     );
     if (!ok) return;
     setBusyId(s['.id']);
     try {
       await api.disconnect(s['.id']);
-      toast.success(`Đã ngắt phiên truy cập của "${s.user}" (${s.ip})`, 'Ngắt phiên thành công');
+      toast.success(`${s.user} (${s.ip})`, t('sessions.disconnect'));
       loadAllData();
     } catch (err) {
-      toast.error(`Không thể ngắt kết nối: ${err.message}`, 'Lỗi ngắt phiên');
+      toast.error(err.message, t('common.error'));
     } finally {
       setBusyId(null);
     }
@@ -76,16 +78,16 @@ export default function SessionsPage() {
   // Thao tác xóa Host khỏi Hotspot
   async function handleDeleteHost(h) {
     const ok = window.confirm(
-      `Xóa thiết bị "${h.hostName || h.macAddress}" (${h.ipAddress}) khỏi danh sách kết nối router?`
+      t('sessions.deleteHostConfirm', { name: h.hostName || h.macAddress, ip: h.ipAddress })
     );
     if (!ok) return;
     setBusyId(h.id);
     try {
       await api.deleteHost(h.id);
-      toast.success(`Đã xóa thiết bị ${h.macAddress} khỏi router`);
+      toast.success(h.macAddress, t('common.delete'));
       loadAllData();
     } catch (err) {
-      toast.error(`Lỗi khi xóa thiết bị: ${err.message}`);
+      toast.error(err.message, t('common.error'));
     } finally {
       setBusyId(null);
     }
@@ -94,16 +96,16 @@ export default function SessionsPage() {
   // Thao tác xóa DHCP Lease
   async function handleDeleteLease(l) {
     const ok = window.confirm(
-      `Thu hồi và xóa cấp phát IP ${l.ipAddress} của thiết bị ${l.hostName || l.macAddress}?`
+      t('sessions.revokeLeaseConfirm', { ip: l.ipAddress, name: l.hostName || l.macAddress })
     );
     if (!ok) return;
     setBusyId(l.id);
     try {
       await api.deleteDhcpLease(l.id);
-      toast.success(`Đã thu hồi IP ${l.ipAddress}`);
+      toast.success(l.ipAddress, t('sessions.revokeIp'));
       loadAllData();
     } catch (err) {
-      toast.error(`Lỗi khi thu hồi IP: ${err.message}`);
+      toast.error(err.message, t('common.error'));
     } finally {
       setBusyId(null);
     }
@@ -153,16 +155,16 @@ export default function SessionsPage() {
       <div className="sk-topbar flex-wrap">
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="sk-title">Giám Sát Thiết Bị & Phiên Hoạt Động</h1>
+            <h1 className="sk-title">{t('sessions.title')}</h1>
             <span className={`sk-pill ${sessions.length > 0 ? 'sk-pill--green' : 'sk-pill--amber'}`}>
               <span className="sk-pill__dot" />
-              {sessions.length} ACTIVE SESSIONS
+              {t('sessions.activeBadge', { count: sessions.length })}
             </span>
-            <span className="sk-tag sk-tag--prod">{hosts.length} HOSTS</span>
-            <span className="sk-tag sk-tag--dev">{leases.length} DHCP LEASES</span>
+            <span className="sk-tag sk-tag--prod">{t('sessions.hostsBadge', { count: hosts.length })}</span>
+            <span className="sk-tag sk-tag--dev">{t('sessions.leasesBadge', { count: leases.length })}</span>
           </div>
           <p className="sk-subtitle font-mono">
-            Theo dõi phiên đăng nhập Hotspot, thiết bị kết nối vào sóng WiFi/LAN và bảng cấp phát DHCP
+            {t('sessions.subtitle')}
           </p>
         </div>
 
@@ -173,7 +175,7 @@ export default function SessionsPage() {
             className="btn btn-secondary btn-sm"
           >
             <span className={refreshing ? 'animate-spin inline-block' : 'inline-block'}>⟳</span>{' '}
-            {refreshing ? 'Đang cập nhật…' : 'Làm mới ngay'}
+            {refreshing ? t('common.refreshing') : t('common.refreshNow')}
           </button>
         </div>
       </div>
@@ -182,11 +184,10 @@ export default function SessionsPage() {
         <div className="rounded-[var(--radius)] border border-[rgba(251,111,111,0.3)] bg-[var(--red-bg)] p-4 text-xs font-mono text-[var(--red)]">
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-semibold">⚠ Không thể lấy danh sách thiết bị từ router.</p>
-              <p className="mt-1 text-[var(--text-dim)]">{error}</p>
+              <p className="font-semibold">⚠️ {error}</p>
             </div>
             <button onClick={() => loadAllData(true)} className="btn btn-danger btn-sm">
-              ⟳ Thử lại
+              ⟳ {t('common.retry')}
             </button>
           </div>
         </div>
@@ -201,19 +202,19 @@ export default function SessionsPage() {
                 onClick={() => setCurrentTab('active')}
                 className={`sk-seg__btn ${currentTab === 'active' ? 'is-on' : ''}`}
               >
-                ⚡ Phiên Đăng Nhập <span className="sk-seg__count">{sessions.length}</span>
+                {t('sessions.tabActive')} <span className="sk-seg__count">{sessions.length}</span>
               </button>
               <button
                 onClick={() => setCurrentTab('hosts')}
                 className={`sk-seg__btn ${currentTab === 'hosts' ? 'is-on' : ''}`}
               >
-                📱 Thiết Bị Kết Nối Router <span className="sk-seg__count">{hosts.length}</span>
+                {t('sessions.tabHosts')} <span className="sk-seg__count">{hosts.length}</span>
               </button>
               <button
                 onClick={() => setCurrentTab('leases')}
                 className={`sk-seg__btn ${currentTab === 'leases' ? 'is-on' : ''}`}
               >
-                🌐 Cấp Phát DHCP <span className="sk-seg__count">{leases.length}</span>
+                {t('sessions.tabLeases')} <span className="sk-seg__count">{leases.length}</span>
               </button>
             </div>
           </div>
@@ -221,7 +222,7 @@ export default function SessionsPage() {
           <div className="w-full sm:w-72">
             <input
               type="text"
-              placeholder="Tìm theo Tên thiết bị, IP, MAC..."
+              placeholder={t('sessions.searchPlaceholder')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="form-input text-xs font-mono"
@@ -231,7 +232,7 @@ export default function SessionsPage() {
 
         {initialLoading && sessions.length === 0 && hosts.length === 0 && leases.length === 0 && !error ? (
           <div className="p-16 flex justify-center">
-            <Spinner label="Đang đồng bộ dữ liệu thiết bị từ router MikroTik…" />
+            <Spinner label={t('common.loading')} />
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -240,13 +241,13 @@ export default function SessionsPage() {
               <table className="sk-dtable">
                 <thead>
                   <tr>
-                    <th>TÀI KHOẢN NGƯỜI DÙNG</th>
-                    <th>ĐỊA CHỈ IP</th>
-                    <th>ĐỊA CHỈ MAC</th>
-                    <th className="text-right">UPTIME</th>
-                    <th className="text-right">IDLE TIME</th>
-                    <th className="text-right">LƯU LƯỢNG (↓ / ↑)</th>
-                    <th className="text-right">THAO TÁC</th>
+                    <th>{t('sessions.colUser')}</th>
+                    <th>{t('sessions.colIp')}</th>
+                    <th>{t('sessions.colMac')}</th>
+                    <th className="text-right">{t('sessions.colUptime')}</th>
+                    <th className="text-right">{t('sessions.colIdleTime')}</th>
+                    <th className="text-right">{t('sessions.colTraffic')}</th>
+                    <th className="text-right">{t('common.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -258,17 +259,17 @@ export default function SessionsPage() {
                             📡
                           </div>
                           <h3 className="text-sm font-semibold text-[var(--text)] font-sans">
-                            Không có phiên nào đang hoạt động
+                            {t('sessions.noActiveSessions')}
                           </h3>
                           <p className="text-xs text-[var(--text-faint)] leading-relaxed">
-                            Chưa có thiết bị nào đăng nhập vào cổng WiFi Hotspot (Captive Portal). Bạn có thể xem tab <b>"Thiết Bị Kết Nối Router"</b> hoặc <b>"Cấp Phát DHCP"</b> để thấy các máy đang cắm dây hoặc bắt WiFi.
+                            {t('sessions.noActiveSessionsDesc')}
                           </p>
                           <div className="pt-2 flex justify-center gap-2 font-sans">
                             <button onClick={() => setCurrentTab('hosts')} className="btn btn-primary btn-sm">
-                              📱 Xem thiết bị đang kết nối ({hosts.length})
+                              {t('sessions.viewConnectedHosts', { count: hosts.length })}
                             </button>
                             <Link to="/users" className="btn btn-secondary btn-sm no-underline">
-                              👥 Quản lý người dùng
+                              👥 {t('users.titleUsers')}
                             </Link>
                           </div>
                         </div>
@@ -288,23 +289,23 @@ export default function SessionsPage() {
                         </td>
                         <td className="font-mono text-xs text-[var(--cyan)] font-semibold">{s.ip}</td>
                         <td className="font-mono text-xs text-[var(--text-faint)]">{s['mac-address']}</td>
-                        <td className="font-mono text-xs text-right text-[var(--text)]">{formatDuration(s.uptime)}</td>
-                        <td className="font-mono text-xs text-right text-[var(--text-faint)]">{formatDuration(s['idle-time'])}</td>
+                        <td className="font-mono text-xs text-right text-[var(--text)]">{formatDuration(s.uptime, language)}</td>
+                        <td className="font-mono text-xs text-right text-[var(--text-faint)]">{formatDuration(s['idle-time'], language)}</td>
                         <td className="font-mono text-xs text-right">
                           <span className="text-[var(--green)] font-semibold">{formatBytes(s['bytes-in'])}</span> ↓ /{' '}
                           <span className="text-[var(--cyan)] font-semibold">{formatBytes(s['bytes-out'])}</span> ↑
                         </td>
                         <td className="text-right">
                           {isViewer ? (
-                            <span className="font-mono text-xs text-[var(--text-faint)]">READ ONLY</span>
+                            <span className="font-mono text-xs text-[var(--text-faint)]">{t('common.readOnly')}</span>
                           ) : (
                             <button
                               onClick={() => handleDisconnectSession(s)}
                               disabled={busyId === s['.id']}
                               className="btn btn-danger btn-sm"
-                              title="Ngắt kết nối phiên này"
+                              title={t('sessions.disconnect')}
                             >
-                              {busyId === s['.id'] ? 'Đang ngắt…' : 'Ngắt kết nối'}
+                              {busyId === s['.id'] ? t('sessions.disconnecting') : t('sessions.disconnect')}
                             </button>
                           )}
                         </td>
@@ -320,14 +321,14 @@ export default function SessionsPage() {
               <table className="sk-dtable">
                 <thead>
                   <tr>
-                    <th>TÊN THIẾT BỊ / GHI CHÚ</th>
-                    <th>ĐỊA CHỈ IP</th>
-                    <th>ĐỊA CHỈ MAC</th>
-                    <th>PORT / INTERFACE</th>
-                    <th>TRẠNG THÁI XÁC THỰC</th>
-                    <th className="text-right">UPTIME</th>
-                    <th className="text-right">LƯU LƯỢNG (↓ / ↑)</th>
-                    <th className="text-right">THAO TÁC</th>
+                    <th>{t('sessions.colHostName')}</th>
+                    <th>{t('sessions.colIp')}</th>
+                    <th>{t('sessions.colMac')}</th>
+                    <th>{t('sessions.colPort')}</th>
+                    <th>{t('sessions.colAuthStatus')}</th>
+                    <th className="text-right">{t('sessions.colUptime')}</th>
+                    <th className="text-right">{t('sessions.colTraffic')}</th>
+                    <th className="text-right">{t('common.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -339,17 +340,17 @@ export default function SessionsPage() {
                             🔌
                           </div>
                           <h3 className="text-sm font-semibold text-[var(--text)] font-sans">
-                            Không có thiết bị nào trong bảng Hotspot Host
+                            {t('sessions.noHosts')}
                           </h3>
                           <p className="text-xs text-[var(--text-faint)] leading-relaxed">
-                            Hiện chưa có thiết bị nào gửi gói tin qua cổng mạng Hotspot. Bạn có thể kiểm tra tab <b>"Cấp Phát DHCP"</b> để xem danh sách IP được router cấp phát.
+                            {t('sessions.noHostsDesc')}
                           </p>
                           <div className="pt-2 flex justify-center gap-2 font-sans">
                             <button onClick={() => setCurrentTab('leases')} className="btn btn-primary btn-sm">
-                              🌐 Xem DHCP Leases ({leases.length})
+                              {t('sessions.viewDhcpLeases', { count: leases.length })}
                             </button>
                             <button onClick={loadAllData} className="btn btn-ghost btn-sm">
-                              ⟳ Làm mới
+                              ⟳ {t('common.refresh')}
                             </button>
                           </div>
                         </div>
@@ -365,7 +366,7 @@ export default function SessionsPage() {
                           <td>
                             <div>
                               <div className="font-semibold text-[var(--text)] flex items-center gap-2 font-sans">
-                                <span>{h.hostName || 'Thiết bị không tên'}</span>
+                                <span>{h.hostName || t('sessions.unnamedDevice')}</span>
                                 {h.comment && <span className="sk-tag text-[9px]">{h.comment}</span>}
                               </div>
                               <div className="text-[10px] text-[var(--text-faint)] font-mono mt-0.5">
@@ -383,34 +384,34 @@ export default function SessionsPage() {
                           <td>
                             {isAuth ? (
                               <span className="sk-pill sk-pill--green">
-                                <span className="sk-pill__dot" /> ĐÃ ĐĂNG NHẬP
+                                <span className="sk-pill__dot" /> {t('sessions.authLoggedIn')}
                               </span>
                             ) : isBypassed ? (
                               <span className="sk-pill sk-pill--cyan">
-                                <span className="sk-pill__dot" /> BYPASS MAC
+                                <span className="sk-pill__dot" /> {t('sessions.authBypass')}
                               </span>
                             ) : (
                               <span className="sk-pill sk-pill--amber">
-                                <span className="sk-pill__dot" /> CHỜ ĐĂNG NHẬP
+                                <span className="sk-pill__dot" /> {t('sessions.authWaiting')}
                               </span>
                             )}
                           </td>
-                          <td className="font-mono text-xs text-right text-[var(--text)]">{formatDuration(h.uptime)}</td>
+                          <td className="font-mono text-xs text-right text-[var(--text)]">{formatDuration(h.uptime, language)}</td>
                           <td className="font-mono text-xs text-right">
                             <span className="text-[var(--green)] font-semibold">{formatBytes(h.bytesIn)}</span> ↓ /{' '}
                             <span className="text-[var(--cyan)] font-semibold">{formatBytes(h.bytesOut)}</span> ↑
                           </td>
                           <td className="text-right">
                             {isViewer ? (
-                              <span className="font-mono text-xs text-[var(--text-faint)]">READ ONLY</span>
+                              <span className="font-mono text-xs text-[var(--text-faint)]">{t('common.readOnly')}</span>
                             ) : (
                               <button
                                 onClick={() => handleDeleteHost(h)}
                                 disabled={busyId === h.id}
                                 className="btn btn-ghost btn-sm text-[var(--red)] hover:bg-[var(--red-bg)]"
-                                title="Xóa thiết bị khỏi bảng host"
+                                title={t('sessions.deleteHost')}
                               >
-                                {busyId === h.id ? 'Đang xóa…' : '✕ Xóa'}
+                                {busyId === h.id ? t('sessions.deletingHost') : t('sessions.deleteHost')}
                               </button>
                             )}
                           </td>
@@ -427,14 +428,14 @@ export default function SessionsPage() {
               <table className="sk-dtable">
                 <thead>
                   <tr>
-                    <th>TÊN MÁY (HOST NAME)</th>
-                    <th>ĐỊA CHỈ IP ĐÃ CẤP</th>
-                    <th>ĐỊA CHỈ MAC</th>
-                    <th>DHCP SERVER</th>
-                    <th>TRẠNG THÁI</th>
-                    <th className="text-right">THỜI GIAN CÒN LẠI</th>
-                    <th className="text-right">KIỂU CẤP PHÁT</th>
-                    <th className="text-right">THAO TÁC</th>
+                    <th>{t('sessions.colHostName')}</th>
+                    <th>{t('sessions.colIp')}</th>
+                    <th>{t('sessions.colMac')}</th>
+                    <th>{t('sessions.colDhcpServer')}</th>
+                    <th>{t('common.status')}</th>
+                    <th className="text-right">{t('sessions.colExpiresAfter')}</th>
+                    <th className="text-right">{t('sessions.colType')}</th>
+                    <th className="text-right">{t('common.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -446,10 +447,10 @@ export default function SessionsPage() {
                             🌐
                           </div>
                           <h3 className="text-sm font-semibold text-[var(--text)] font-sans">
-                            Không có bản ghi DHCP Lease nào
+                            {t('sessions.noLeases')}
                           </h3>
                           <p className="text-xs text-[var(--text-faint)] leading-relaxed">
-                            Chưa có thiết bị nào nhận địa chỉ IP từ DHCP Server của router.
+                            {t('sessions.noLeasesDesc')}
                           </p>
                         </div>
                       </td>
@@ -460,7 +461,7 @@ export default function SessionsPage() {
                         <td>
                           <div>
                             <div className="font-semibold text-[var(--text)] flex items-center gap-2 font-sans">
-                              <span>{l.hostName || 'Thiết bị không tên'}</span>
+                              <span>{l.hostName || t('sessions.unnamedDevice')}</span>
                               {l.comment && <span className="sk-tag text-[9px]">{l.comment}</span>}
                             </div>
                             <div className="text-[10px] text-[var(--text-faint)] font-mono mt-0.5">
@@ -478,28 +479,28 @@ export default function SessionsPage() {
                         <td>
                           <span className={`sk-pill ${l.status === 'bound' ? 'sk-pill--green' : 'sk-pill--amber'}`}>
                             <span className="sk-pill__dot" />
-                            {l.status.toUpperCase()}
+                            {l.status ? l.status.toUpperCase() : 'BOUND'}
                           </span>
                         </td>
                         <td className="font-mono text-xs text-right text-[var(--text-dim)]">
-                          {l.expiresAfter ? formatDuration(l.expiresAfter) : 'Vĩnh viễn'}
+                          {l.expiresAfter ? formatDuration(l.expiresAfter, language) : t('sessions.forever')}
                         </td>
                         <td className="font-mono text-xs text-right">
                           <span className={`sk-tag ${l.dynamic ? 'sk-tag--dev' : 'sk-tag--prod'}`}>
-                            {l.dynamic ? 'DYNAMIC' : 'STATIC'}
+                            {l.dynamic ? t('common.dynamic') : t('common.static')}
                           </span>
                         </td>
                         <td className="text-right">
                           {isViewer ? (
-                            <span className="font-mono text-xs text-[var(--text-faint)]">READ ONLY</span>
+                            <span className="font-mono text-xs text-[var(--text-faint)]">{t('common.readOnly')}</span>
                           ) : (
                             <button
                               onClick={() => handleDeleteLease(l)}
                               disabled={busyId === l.id}
                               className="btn btn-ghost btn-sm text-[var(--red)] hover:bg-[var(--red-bg)]"
-                              title="Thu hồi địa chỉ IP này"
+                              title={t('sessions.revokeIp')}
                             >
-                              {busyId === l.id ? 'Đang thu hồi…' : '✕ Thu hồi'}
+                              {busyId === l.id ? t('sessions.revokingIp') : t('sessions.revokeIp')}
                             </button>
                           )}
                         </td>

@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { useToast } from '../hooks/useToast.jsx';
+import { useLanguage } from '../context/LanguageContext.jsx';
 
 export default function LoginPage() {
   const { login } = useAuth();
+  const { language, setLanguage, t } = useLanguage();
   const toast = useToast();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
@@ -19,18 +21,29 @@ export default function LoginPage() {
     setError('');
     try {
       const res = await login(username.trim(), password, rememberMe);
-      toast.success(`Chào mừng ${res?.fullName || res?.username || username}!`, 'Đăng nhập thành công');
+      toast.success(`Chào mừng ${res?.fullName || res?.username || username}!`, t('common.success'));
       navigate('/', { replace: true });
     } catch (err) {
       setError(err.message);
-      toast.error(err.message, 'Đăng nhập thất bại');
+      toast.error(err.message, t('common.error'));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--bg-body)] bg-grid p-4 text-[var(--text)]">
+    <div className="min-h-screen flex items-center justify-center bg-[var(--bg-body)] bg-grid p-4 text-[var(--text)] relative">
+      {/* Top right language switch */}
+      <div className="absolute top-4 right-4">
+        <button
+          type="button"
+          onClick={() => setLanguage(language === 'vi' ? 'en' : 'vi')}
+          className="btn btn-secondary btn-sm font-mono text-xs"
+        >
+          {language === 'vi' ? '🇬🇧 English' : '🇻🇳 Tiếng Việt'}
+        </button>
+      </div>
+
       <div className="w-full max-w-sm rounded-[var(--radius-lg)] border border-[var(--border-strong)] bg-[var(--surface)] p-8 shadow-[var(--shadow-lg)]">
         {/* Brand Header */}
         <div className="mb-6 flex flex-col items-center gap-3">
@@ -45,10 +58,10 @@ export default function LoginPage() {
           </div>
           <div className="text-center">
             <h1 className="text-xl font-bold tracking-tight text-[var(--text)]">
-              Hotspot & Infra Console
+              {t('auth.loginTitle')}
             </h1>
             <p className="font-mono text-[11px] text-[var(--text-faint)] uppercase tracking-wider mt-0.5">
-              MikroTik RouterOS 7 · REST Interface
+              {t('auth.loginSubtitle')}
             </p>
           </div>
         </div>
@@ -62,7 +75,7 @@ export default function LoginPage() {
           )}
 
           <div>
-            <label className="form-label">Tài khoản</label>
+            <label className="form-label">{t('auth.username')}</label>
             <input
               id="login-username"
               name="username"
@@ -76,7 +89,7 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="form-label">Mật khẩu</label>
+            <label className="form-label">{t('auth.password')}</label>
             <input
               id="login-password"
               name="password"
@@ -97,7 +110,7 @@ export default function LoginPage() {
                 onChange={(e) => setRememberMe(e.target.checked)}
                 className="cursor-pointer"
               />
-              <span>Ghi nhớ đăng nhập (3 ngày)</span>
+              <span>{t('auth.rememberMe')}</span>
             </label>
           </div>
 
@@ -106,7 +119,7 @@ export default function LoginPage() {
             disabled={busy}
             className="btn btn-primary w-full mt-2 h-10 font-semibold"
           >
-            {busy ? 'Đang đăng nhập…' : 'Đăng nhập vào hệ thống'}
+            {busy ? t('auth.loggingIn') : t('auth.loginButton')}
           </button>
         </form>
 

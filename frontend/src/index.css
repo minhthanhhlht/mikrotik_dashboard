@@ -428,10 +428,14 @@ code, kbd, samp, pre, .font-mono {
 }
 
 .sk-dtable thead {
-  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--surface-2);
 }
 
 .sk-dtable th {
+  background: var(--surface-2);
   font-family: var(--mono);
   font-size: 10.5px;
   font-weight: 600;
@@ -637,11 +641,16 @@ code, kbd, samp, pre, .font-mono {
 }
 
 /* ============================================================
-   Form Inputs & Controls
+   Form Inputs & Modal Controls (ServerKit Form System)
    ============================================================ */
+
+/* Base Input Primitives (.input, .sk-input, .form-input) */
+.input,
+.sk-input,
 .form-input,
 .input-ghost,
 .input-underline {
+  display: block;
   width: 100%;
   height: 38px;
   background: var(--surface-2);
@@ -652,45 +661,356 @@ code, kbd, samp, pre, .font-mono {
   color: var(--text);
   font-family: var(--sans);
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  outline: none;
 }
 
+.input:hover,
+.sk-input:hover,
+.form-input:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-3);
+}
+
+.input:focus,
+.sk-input:focus,
 .form-input:focus,
 .input-ghost:focus,
 .input-underline:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-bg);
+  box-shadow: 0 0 0 3px var(--accent-glow);
   background: var(--surface);
 }
 
-.form-input::placeholder,
-.input-ghost::placeholder,
-.input-underline::placeholder {
+.input::placeholder,
+.sk-input::placeholder,
+.form-input::placeholder {
   color: var(--text-ghost);
 }
 
-.form-input:disabled,
-.input-ghost:disabled {
+.input:disabled,
+.sk-input:disabled,
+.form-input:disabled {
   background: var(--surface-0);
   color: var(--text-faint);
   border-color: var(--border-soft);
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
+/* Input Sizes (.input-sm, .input-lg) */
+.input-sm,
+.sk-input-sm {
+  height: 32px;
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-left: 10px;
+  padding-right: 10px;
+  font-size: 12.5px;
+  border-radius: 6px;
+}
+
+.input-lg,
+.sk-input-lg {
+  height: 44px;
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-left: 14px;
+  padding-right: 14px;
+  font-size: 15px;
+  border-radius: var(--radius);
+}
+
+/* ============================================================
+   Input with Icon & Collision Prevention System
+   (Tránh đè Icon, Text, và Description / Helper Text)
+   ============================================================ */
+.sk-input-wrapper,
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.sk-input-icon,
+.input-icon {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.sk-input-icon--left,
+.input-icon-left {
+  left: 11px;
+}
+
+.sk-input-icon--right,
+.input-icon-right {
+  right: 11px;
+}
+
+.sk-input-icon.is-clickable,
+.input-icon.is-clickable {
+  pointer-events: auto;
+  cursor: pointer;
+  color: var(--text-dim);
+  transition: color 0.15s ease;
+}
+
+.sk-input-icon.is-clickable:hover,
+.input-icon.is-clickable:hover {
+  color: var(--accent-bright);
+}
+
+/* Guaranteed padding rules for inputs with Left / Right Icons (Prevents text & placeholder overlap) */
+.input.has-icon-left,
+.sk-input--icon-left,
+.input.pl-8,
+.input.pl-9,
+.input.pl-10,
+.input.pl-11,
+.input.pl-12,
+.form-input.pl-8,
+.form-input.pl-9,
+.form-input.pl-10,
+.form-input.pl-11,
+.form-input.pl-12,
+.sk-input.pl-8,
+.sk-input.pl-9,
+.sk-input.pl-10,
+.sk-input.pl-11,
+.sk-input.pl-12,
+.sk-input-wrapper > input.has-icon-left,
+.sk-input-wrapper > select.has-icon-left {
+  padding-left: 38px !important;
+}
+
+.input.has-icon-right,
+.sk-input--icon-right,
+.input.pr-8,
+.input.pr-9,
+.input.pr-10,
+.input.pr-11,
+.input.pr-12,
+.form-input.pr-8,
+.form-input.pr-9,
+.form-input.pr-10,
+.form-input.pr-11,
+.form-input.pr-12,
+.sk-input.pr-8,
+.sk-input.pr-9,
+.sk-input.pr-10,
+.sk-input.pr-11,
+.sk-input.pr-12,
+.sk-input-wrapper > input.has-icon-right,
+.sk-input-wrapper > select.has-icon-right {
+  padding-right: 38px !important;
+}
+
+/* Select Control with Clean SVG Chevron */
+select.input,
+select.sk-input,
+select.form-input,
+.sk-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238892b0' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 16px 16px;
+  padding-right: 34px !important;
+  cursor: pointer;
+}
+
+[data-theme="light"] select.input,
+[data-theme="light"] select.sk-input,
+[data-theme="light"] select.form-input,
+[data-theme="light"] .sk-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+}
+
+/* Textarea styling */
+textarea.input,
+textarea.sk-input,
+textarea.form-input,
+.sk-textarea {
+  height: auto;
+  min-height: 84px;
+  padding: 10px 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+/* Form Labels & Headings (.label, .sk-label, .form-label) */
+.label,
+.sk-label,
 .form-label,
 .label-caps {
-  display: block;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
   font-family: var(--mono);
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   color: var(--text-dim);
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
-/* Checkboxes */
+.sk-label-req {
+  color: var(--red);
+  font-weight: 700;
+  margin-left: 1px;
+}
+
+.sk-form-section {
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.sk-form-section__title {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-bright);
+  margin-bottom: 12px;
+}
+
+/* Help text / Descriptions below input (Clear separation, never overlapping) */
+.sk-help-text,
+.input-help-text,
+.form-description {
+  display: block;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-faint);
+  margin-top: 5px;
+  position: static !important;
+  clear: both;
+}
+
+/* Checkboxes & Switches */
 input[type="checkbox"] {
   accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* Badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2.5px 7px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+
+.badge-success {
+  background: var(--green-bg);
+  color: var(--green);
+  border-color: rgba(61, 220, 151, 0.35);
+}
+
+.badge-warning {
+  background: var(--amber-bg);
+  color: var(--amber);
+  border-color: rgba(245, 185, 69, 0.35);
+}
+
+.badge-danger {
+  background: var(--red-bg);
+  color: var(--red);
+  border-color: rgba(251, 111, 111, 0.35);
+}
+
+.badge-accent {
+  background: var(--accent-bg);
+  color: var(--accent-bright);
+  border-color: var(--accent-dim);
+}
+
+.badge-info {
+  background: var(--cyan-bg);
+  color: var(--cyan);
+  border-color: rgba(73, 199, 240, 0.35);
+}
+
+.badge-default {
+  background: var(--surface-3);
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+
+/* Card & Table primitives */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.table-sk {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: left;
+}
+
+.table-sk thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--surface-2);
+}
+
+.table-sk th {
+  background: var(--surface-2);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.table-sk td {
+  padding: 12px 16px;
+  vertical-align: middle;
+}
+
+.table-sk tbody tr {
+  transition: background 0.12s ease;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.table-sk tbody tr:hover {
+  background: var(--surface-hover);
 }
 
 /* Custom Scrollbars */

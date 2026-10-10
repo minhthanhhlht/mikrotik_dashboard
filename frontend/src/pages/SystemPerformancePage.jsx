@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { useEventSource } from '../hooks/useEventSource.jsx';
+import { useLanguage } from '../context/LanguageContext.jsx';
 import Spinner from '../components/Spinner.jsx';
+import Modal from '../components/Modal.jsx';
+import CustomSelect from '../components/CustomSelect.jsx';
 import { formatBytes, formatDuration } from '../utils/format.js';
 
 function formatSpeed(bps) {
@@ -29,12 +32,39 @@ function formatStorageBytes(bytes) {
 const MAX_HISTORY_POINTS = 30;
 
 export default function SystemPerformancePage() {
+  const { t } = useLanguage();
   const [liveData, setLiveData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isPaused, setIsPaused] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(1500);
   const [history, setHistory] = useState([]);
+  const [routerPowerModal, setRouterPowerModal] = useState(null); // 'reboot' | 'shutdown' | null
+  const [routerPowerBusy, setRouterPowerBusy] = useState(false);
+  const [interfaceSearch, setInterfaceSearch] = useState('');
+  const [interfaceTab, setInterfaceTab] = useState('all'); // 'all' | 'running' | 'down'
+  const [interfacePage, setInterfacePage] = useState(1);
+  const [interfacePageSize, setInterfacePageSize] = useState(8);
+
+  async function handleExecuteRouterPower() {
+    if (!routerPowerModal) return;
+    const command = routerPowerModal;
+    setRouterPowerBusy(true);
+    try {
+      if (command === 'reboot') {
+        await api.routerReboot();
+        alert('Đã gửi lệnh khởi động lại Router MikroTik thành công!');
+      } else {
+        await api.routerShutdown();
+        alert('Đã gửi lệnh tắt nguồn Router MikroTik thành công!');
+      }
+      setRouterPowerModal(null);
+    } catch (err) {
+      alert(err.message || 'Lỗi điều khiển nguồn Router');
+    } finally {
+      setRouterPowerBusy(false);
+    }
+  }
 
   const sseUrl = `/api/system/performance/events?interval=${refreshInterval}`;
 
@@ -84,7 +114,29 @@ export default function SystemPerformancePage() {
   const rb = liveData?.routerboard || {};
   const health = liveData?.health || {};
   const traffic = liveData?.traffic || {};
-  const interfaces = liveData?.interfaces || [];
+  const rawInterfaces = liveData?.interfaces || [];
+
+  const filteredInterfaces = rawInterfaces.filter((item) => {
+    if (interfaceTab === 'running' && !item.running) return false;
+    if (interfaceTab === 'down' && item.running) return false;
+
+    if (interfaceSearch) {
+      const q = interfaceSearch.toLowerCase();
+      const matchName = String(item.name || '').toLowerCase().includes(q);
+      const matchType = String(item.type || '').toLowerCase().includes(q);
+      const matchComment = String(item.comment || '').toLowerCase().includes(q);
+      if (!matchName && !matchType && !matchComment) return false;
+    }
+
+    return true;
+  });
+
+  const totalInterfacePages = interfacePageSize === 'all' ? 1 : Math.ceil(filteredInterfaces.length / Number(interfacePageSize)) || 1;
+  const safeInterfacePage = Math.min(interfacePage, totalInterfacePages);
+
+  const displayedInterfaces = interfacePageSize === 'all'
+    ? filteredInterfaces
+    : filteredInterfaces.slice((safeInterfacePage - 1) * Number(interfacePageSize), safeInterfacePage * Number(interfacePageSize));
 
   const getLoadColor = (percent) => {
     if (percent >= 85) return 'var(--red)';
@@ -98,19 +150,39 @@ export default function SystemPerformancePage() {
       <div className="sk-topbar flex-wrap">
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="sk-title">Hiệu năng Router Real-Time</h1>
+            <h1 className="sk-title">{t('performance.title')}</h1>
             <span className={`sk-pill ${isPaused ? 'sk-pill--amber' : 'sk-pill--green'}`}>
               <span className="sk-pill__dot" />
-              {isPaused ? 'PAUSED' : 'STREAMING'}
+              {isPaused ? t('performance.paused') : t('performance.streaming')}
             </span>
           </div>
           <p className="sk-subtitle font-mono">
-            Giám sát CPU, RAM, Băng thông mạng & Phần cứng MikroTik RouterOS 7
+            {t('performance.subtitle')}
           </p>
         </div>
 
-        {/* Realtime Action Controls */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        {/* Realtime Action Controls & Router Power */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Nút nguồn Router / Máy tính */}
+          <div className="flex items-center gap-1 bg-[var(--surface-2)] p-0.5 rounded-[var(--radius-sm)] border border-[var(--border-soft)]">
+            <button
+              type="button"
+              onClick={() => setRouterPowerModal('reboot')}
+              className="btn btn-ghost btn-xs text-sky-400 hover:bg-sky-500/10 font-mono text-xs px-2.5 h-7"
+              title="Khởi động lại Router MikroTik"
+            >
+              🔄 Reboot Router
+            </button>
+            <button
+              type="button"
+              onClick={() => setRouterPowerModal('shutdown')}
+              className="btn btn-ghost btn-xs text-rose-400 hover:bg-rose-500/10 font-mono text-xs px-2.5 h-7"
+              title="Tắt nguồn Router MikroTik"
+            >
+              🛑 Shutdown Router
+            </button>
+          </div>
+
           <div className="sk-seg">
             {[1000, 1500, 3000].map((ms) => (
               <button
@@ -127,7 +199,7 @@ export default function SystemPerformancePage() {
             onClick={() => setIsPaused(!isPaused)}
             className={`btn btn-sm ${isPaused ? 'btn-primary' : 'btn-secondary'}`}
           >
-            {isPaused ? '▶ Tiếp tục' : '⏸ Tạm dừng'}
+            {isPaused ? `▶ ${t('common.resume')}` : `⏸ ${t('common.pause')}`}
           </button>
 
           <button
@@ -135,7 +207,7 @@ export default function SystemPerformancePage() {
             disabled={loading}
             className="btn btn-secondary btn-sm"
           >
-            {loading ? <Spinner size="xs" /> : '⟳'} Làm mới
+            {loading ? <Spinner size="xs" /> : '⟳'} {t('common.refresh')}
           </button>
         </div>
       </div>
@@ -146,14 +218,14 @@ export default function SystemPerformancePage() {
             <span>⚠️</span> {error}
           </div>
           <p className="mt-1 text-[var(--text-dim)]">
-            Đảm bảo Router MikroTik đang chạy dịch vụ REST và tài khoản có quyền truy cập.
+            {t('performance.restErrorHint')}
           </p>
         </div>
       )}
 
       {loading && !liveData ? (
         <div className="sk-card flex h-64 items-center justify-center">
-          <Spinner label="Đang kết nối luồng dữ liệu hiệu năng RouterOS…" />
+          <Spinner label={t('common.loading')} />
         </div>
       ) : (
         <>
@@ -162,7 +234,7 @@ export default function SystemPerformancePage() {
             {/* 1. CPU Load */}
             <div className="sk-kpi">
               <div className="sk-kpi__header">
-                <span className="sk-kpi__label">Bộ vi xử lý (CPU)</span>
+                <span className="sk-kpi__label">{t('performance.cpuUsage')}</span>
                 <span className="sk-state sk-state--accent font-mono text-[10px]">
                   {res.cpuCount || 1} CORE {res.cpuFrequency ? `@ ${res.cpuFrequency}MHz` : ''}
                 </span>
@@ -213,9 +285,9 @@ export default function SystemPerformancePage() {
             {/* 2. RAM Memory */}
             <div className="sk-kpi">
               <div className="sk-kpi__header">
-                <span className="sk-kpi__label">Bộ nhớ RAM</span>
+                <span className="sk-kpi__label">{t('performance.ramUsage')}</span>
                 <span className="sk-state sk-state--accent font-mono text-[10px]">
-                  {res.memoryUsagePercent || 0}% DÙNG
+                  {res.memoryUsagePercent || 0}%
                 </span>
               </div>
 
@@ -225,7 +297,7 @@ export default function SystemPerformancePage() {
                     {formatStorageBytes(res.usedMemory)}
                   </div>
                   <div className="sk-kpi__sub font-mono text-[11px]">
-                    Tổng: {formatStorageBytes(res.totalMemory)} · Trống: {formatStorageBytes(res.freeMemory)}
+                    {formatStorageBytes(res.totalMemory)} · Free: {formatStorageBytes(res.freeMemory)}
                   </div>
                 </div>
 
@@ -264,7 +336,7 @@ export default function SystemPerformancePage() {
             {/* 3. Realtime Bandwidth */}
             <div className="sk-kpi">
               <div className="sk-kpi__header">
-                <span className="sk-kpi__label">Băng thông Live</span>
+                <span className="sk-kpi__label">{t('performance.totalTraffic')}</span>
                 <span className="sk-pill sk-pill--green text-[9px] py-0 px-1.5">
                   <span className="sk-pill__dot" /> LIVE
                 </span>
@@ -272,14 +344,14 @@ export default function SystemPerformancePage() {
 
               <div className="space-y-1.5 mt-1">
                 <div className="flex items-center justify-between rounded-[var(--radius-sm)] bg-[var(--surface-2)] px-2.5 py-1 text-xs">
-                  <span className="font-mono text-[var(--text-dim)]">↓ Tải xuống:</span>
+                  <span className="font-mono text-[var(--text-dim)]">↓ Rx:</span>
                   <span className="font-mono font-bold text-[var(--green)]">
                     {formatSpeed(traffic.totalRxRateBps)}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between rounded-[var(--radius-sm)] bg-[var(--surface-2)] px-2.5 py-1 text-xs">
-                  <span className="font-mono text-[var(--text-dim)]">↑ Tải lên:</span>
+                  <span className="font-mono text-[var(--text-dim)]">↑ Tx:</span>
                   <span className="font-mono font-bold text-[var(--accent-bright)]">
                     {formatSpeed(traffic.totalTxRateBps)}
                   </span>
@@ -295,7 +367,7 @@ export default function SystemPerformancePage() {
             {/* 4. Hardware Health & Storage */}
             <div className="sk-kpi">
               <div className="sk-kpi__header">
-                <span className="sk-kpi__label">Phần cứng & Flash</span>
+                <span className="sk-kpi__label">{t('performance.flashUsage')}</span>
                 <span className="sk-tag sk-tag--prod text-[9px]">
                   {res.badBlocks ? `BAD: ${res.badBlocks}` : 'HEALTHY'}
                 </span>
@@ -303,14 +375,14 @@ export default function SystemPerformancePage() {
 
               <div className="grid grid-cols-2 gap-2 text-xs mt-1">
                 <div className="rounded-[var(--radius-sm)] bg-[var(--surface-2)] p-2 text-center">
-                  <div className="text-[10px] font-mono text-[var(--text-faint)] uppercase">Nhiệt độ</div>
+                  <div className="text-[10px] font-mono text-[var(--text-faint)] uppercase">{t('performance.temperature')}</div>
                   <div className="font-mono font-bold text-[var(--text)] mt-0.5">
                     {health.temperature !== null ? `${health.temperature} °C` : '42 °C'}
                   </div>
                 </div>
 
                 <div className="rounded-[var(--radius-sm)] bg-[var(--surface-2)] p-2 text-center">
-                  <div className="text-[10px] font-mono text-[var(--text-faint)] uppercase">Điện áp</div>
+                  <div className="text-[10px] font-mono text-[var(--text-faint)] uppercase">{t('performance.voltage')}</div>
                   <div className="font-mono font-bold text-[var(--text)] mt-0.5">
                     {health.voltage !== null ? `${health.voltage} V` : '24.0 V'}
                   </div>
@@ -318,7 +390,7 @@ export default function SystemPerformancePage() {
               </div>
 
               <div className="mt-2 flex items-center justify-between text-[11px] font-mono text-[var(--text-faint)]">
-                <span>Ổ Flash:</span>
+                <span>Flash:</span>
                 <span>{res.hddUsagePercent || 0}% ({formatStorageBytes(res.usedHdd)}/{formatStorageBytes(res.totalHdd)})</span>
               </div>
             </div>
@@ -330,8 +402,8 @@ export default function SystemPerformancePage() {
             <div className="sk-card">
               <div className="mb-4 flex items-center justify-between border-b border-[var(--border-soft)] pb-3">
                 <div>
-                  <h2 className="text-sm font-bold text-[var(--text)]">Đồ thị Tải CPU & RAM (Real-Time)</h2>
-                  <p className="font-mono text-[11px] text-[var(--text-faint)]">30 giây gần nhất</p>
+                  <h2 className="text-sm font-bold text-[var(--text)]">{t('performance.chartCpuRamTitle')}</h2>
+                  <p className="font-mono text-[11px] text-[var(--text-faint)]">30s buffer</p>
                 </div>
                 <div className="flex items-center gap-3 text-xs font-mono">
                   <span className="flex items-center gap-1.5 text-[var(--accent-bright)]">
@@ -346,7 +418,7 @@ export default function SystemPerformancePage() {
               <div className="relative h-44 w-full">
                 {history.length < 2 ? (
                   <div className="flex h-full items-center justify-center font-mono text-xs text-[var(--text-faint)]">
-                    Đang thu thập dữ liệu thời gian thực…
+                    {t('common.loading')}
                   </div>
                 ) : (
                   <RealtimeLineChart
@@ -366,8 +438,8 @@ export default function SystemPerformancePage() {
             <div className="sk-card">
               <div className="mb-4 flex items-center justify-between border-b border-[var(--border-soft)] pb-3">
                 <div>
-                  <h2 className="text-sm font-bold text-[var(--text)]">Đồ thị Lưu lượng Mạng (Live Traffic)</h2>
-                  <p className="font-mono text-[11px] text-[var(--text-faint)]">Tốc độ Tải xuống (Rx) & Tải lên (Tx)</p>
+                  <h2 className="text-sm font-bold text-[var(--text)]">{t('performance.chartTrafficTitle')}</h2>
+                  <p className="font-mono text-[11px] text-[var(--text-faint)]">Rx & Tx (Mbps)</p>
                 </div>
                 <div className="flex items-center gap-3 text-xs font-mono">
                   <span className="flex items-center gap-1.5 text-[var(--green)]">
@@ -382,7 +454,7 @@ export default function SystemPerformancePage() {
               <div className="relative h-44 w-full">
                 {history.length < 2 ? (
                   <div className="flex h-full items-center justify-center font-mono text-xs text-[var(--text-faint)]">
-                    Đang thu thập lưu lượng mạng…
+                    {t('common.loading')}
                   </div>
                 ) : (
                   <RealtimeLineChart
@@ -400,40 +472,123 @@ export default function SystemPerformancePage() {
 
           {/* Bảng Giám sát Interface Traffic */}
           <section className="sk-card">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-soft)] pb-3">
+            {/* Header with Title & Status */}
+            <div className="mb-3.5 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-soft)] pb-3">
               <div>
-                <h2 className="text-base font-bold text-[var(--text)]">Cổng Mạng RouterOS (Interface Traffic Monitor)</h2>
+                <h2 className="text-sm sm:text-base font-bold text-[var(--text)]">{t('performance.interfaces')}</h2>
                 <p className="font-mono text-xs text-[var(--text-faint)]">
-                  Lưu lượng & Tốc độ truyền nhận trên từng Interface vật lý/ảo
+                  RouterOS physical & virtual network interfaces
                 </p>
               </div>
-              <span className="sk-state sk-state--accent font-mono text-xs">
-                {interfaces.length} INTERFACES
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="sk-state sk-state--accent font-mono text-xs">
+                  {rawInterfaces.length} INTERFACES
+                </span>
+              </div>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* ListToolbar: Search, Status Segments & Density */}
+            <div className="mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-0.5 sm:pb-0">
+                <div className="sk-seg w-full sm:w-auto flex justify-between sm:justify-start">
+                  <button
+                    type="button"
+                    onClick={() => { setInterfaceTab('all'); setInterfacePage(1); }}
+                    className={`sk-seg__btn flex-1 sm:flex-initial justify-center ${interfaceTab === 'all' ? 'is-on' : ''}`}
+                  >
+                    Tất cả <span className="sk-seg__count">{rawInterfaces.length}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setInterfaceTab('running'); setInterfacePage(1); }}
+                    className={`sk-seg__btn flex-1 sm:flex-initial justify-center ${interfaceTab === 'running' ? 'is-on' : ''}`}
+                  >
+                    Đang chạy <span className="sk-seg__count">{rawInterfaces.filter(i => i.running).length}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setInterfaceTab('down'); setInterfacePage(1); }}
+                    className={`sk-seg__btn flex-1 sm:flex-initial justify-center ${interfaceTab === 'down' ? 'is-on' : ''}`}
+                  >
+                    Ngắt / Tắt <span className="sk-seg__count">{rawInterfaces.filter(i => !i.running).length}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="relative flex-1 sm:w-64 min-w-0">
+                  <input
+                    type="text"
+                    placeholder="Tìm cổng mạng..."
+                    value={interfaceSearch}
+                    onChange={(e) => {
+                      setInterfaceSearch(e.target.value);
+                      setInterfacePage(1);
+                    }}
+                    className="form-input input-sm text-xs font-mono !h-8 pl-8 pr-7 w-full"
+                  />
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-faint)] pointer-events-none">
+                    <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+                      <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                    </svg>
+                  </span>
+                  {interfaceSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setInterfaceSearch('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-faint)] hover:text-[var(--text)] text-xs p-0.5"
+                      title="Xóa tìm kiếm"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                <div className="w-28 sm:w-32 shrink-0">
+                  <CustomSelect
+                    value={String(interfacePageSize)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setInterfacePageSize(val === 'all' ? 'all' : Number(val));
+                      setInterfacePage(1);
+                    }}
+                    className="w-full"
+                    buttonClassName="!h-8 !py-0 text-xs font-mono px-2 sm:px-3"
+                    options={[
+                      { value: '5', label: '5 / trang' },
+                      { value: '8', label: '8 / trang' },
+                      { value: '12', label: '12 / trang' },
+                      { value: '24', label: '24 / trang' },
+                      { value: 'all', label: 'Tất cả' },
+                    ]}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Interface Table with responsive horizontal scroll */}
+            <div className="overflow-x-auto border border-[var(--border-soft)] rounded-[var(--radius-sm)]">
               <table className="sk-dtable">
-                <thead>
+                <thead className="bg-[var(--surface-2)] shadow-[0_1px_0_var(--border)]">
                   <tr>
-                    <th>Interface</th>
-                    <th>Loại / Ghi chú</th>
-                    <th>Trạng thái</th>
-                    <th className="text-right">Tốc độ Tải xuống (Rx)</th>
-                    <th className="text-right">Tốc độ Tải lên (Tx)</th>
-                    <th className="text-right">Tổng Lưu lượng</th>
-                    <th className="text-right">Gói tin / Lỗi</th>
+                    <th>{t('performance.colInterface')}</th>
+                    <th>{t('performance.colType')}</th>
+                    <th>{t('common.status')}</th>
+                    <th className="text-right">{t('performance.colRxRate')}</th>
+                    <th className="text-right">{t('performance.colTxRate')}</th>
+                    <th className="text-right">{t('performance.colRxTotal')} / {t('performance.colTxTotal')}</th>
+                    <th className="text-right">Packets / Errors</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {interfaces.length === 0 ? (
+                  {displayedInterfaces.length === 0 ? (
                     <tr>
                       <td colSpan="7" className="py-8 text-center font-mono text-xs text-[var(--text-faint)]">
-                        Chưa tìm thấy interface nào trên router.
+                        {t('common.empty')}
                       </td>
                     </tr>
                   ) : (
-                    interfaces.map((item) => (
+                    displayedInterfaces.map((item) => (
                       <tr key={item.id || item.name}>
                         <td className="font-mono font-bold">
                           <div className="flex items-center gap-2">
@@ -492,28 +647,64 @@ export default function SystemPerformancePage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Footer Toolbar */}
+            {filteredInterfaces.length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-[var(--text-faint)]">
+                <div>
+                  Hiển thị <span className="text-[var(--text)] font-bold">{displayedInterfaces.length}</span> / {filteredInterfaces.length} cổng mạng
+                  {rawInterfaces.length !== filteredInterfaces.length && (
+                    <span className="ml-1 text-[var(--accent-bright)]">(lọc từ {rawInterfaces.length})</span>
+                  )}
+                </div>
+
+                {interfacePageSize !== 'all' && totalInterfacePages > 1 && (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={safeInterfacePage <= 1}
+                      onClick={() => setInterfacePage((p) => Math.max(1, p - 1))}
+                      className="btn btn-secondary btn-xs px-2 h-7 font-mono disabled:opacity-40"
+                    >
+                      ← Trước
+                    </button>
+                    <span className="px-2 py-1 text-[var(--text-dim)]">
+                      Trang <b className="text-[var(--text)]">{safeInterfacePage}</b> / {totalInterfacePages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={safeInterfacePage >= totalInterfacePages}
+                      onClick={() => setInterfacePage((p) => Math.min(totalInterfacePages, p + 1))}
+                      className="btn btn-secondary btn-xs px-2 h-7 font-mono disabled:opacity-40"
+                    >
+                      Sau →
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </section>
 
           {/* RouterBOARD specs */}
           <section className="sk-card">
             <div className="mb-3 flex items-center gap-2 border-b border-[var(--border-soft)] pb-3">
-              <h2 className="text-sm font-bold text-[var(--text)]">Thông số Phần cứng RouterBOARD</h2>
+              <h2 className="text-sm font-bold text-[var(--text)]">{t('performance.hardwareInfo')}</h2>
               <span className="sk-tag sk-tag--prod text-[9px]">ROS 7</span>
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 text-xs">
               <div className="rounded-[var(--radius-sm)] bg-[var(--surface-2)] p-2.5">
-                <div className="font-mono text-[10px] text-[var(--text-faint)] uppercase">Model</div>
+                <div className="font-mono text-[10px] text-[var(--text-faint)] uppercase">{t('performance.model')}</div>
                 <div className="font-mono font-bold text-[var(--text)] mt-0.5">{rb.model || res.boardName}</div>
               </div>
 
               <div className="rounded-[var(--radius-sm)] bg-[var(--surface-2)] p-2.5">
-                <div className="font-mono text-[10px] text-[var(--text-faint)] uppercase">Serial Number</div>
+                <div className="font-mono text-[10px] text-[var(--text-faint)] uppercase">{t('performance.serialNumber')}</div>
                 <div className="font-mono font-bold text-[var(--accent-bright)] mt-0.5">{rb.serialNumber || '—'}</div>
               </div>
 
               <div className="rounded-[var(--radius-sm)] bg-[var(--surface-2)] p-2.5">
-                <div className="font-mono text-[10px] text-[var(--text-faint)] uppercase">RouterOS Version</div>
+                <div className="font-mono text-[10px] text-[var(--text-faint)] uppercase">{t('performance.firmware')}</div>
                 <div className="font-mono font-bold text-[var(--text)] mt-0.5">{res.version}</div>
               </div>
 
@@ -523,7 +714,7 @@ export default function SystemPerformancePage() {
               </div>
 
               <div className="rounded-[var(--radius-sm)] bg-[var(--surface-2)] p-2.5">
-                <div className="font-mono text-[10px] text-[var(--text-faint)] uppercase">Uptime</div>
+                <div className="font-mono text-[10px] text-[var(--text-faint)] uppercase">{t('performance.uptime')}</div>
                 <div className="font-mono font-bold text-[var(--green)] mt-0.5">{res.uptime}</div>
               </div>
 
@@ -535,6 +726,64 @@ export default function SystemPerformancePage() {
           </section>
         </>
       )}
+
+      {/* Modal Xác nhận Điều khiển Nguồn Router MikroTik */}
+      {routerPowerModal && (
+        <Modal
+          open={Boolean(routerPowerModal)}
+          onClose={() => !routerPowerBusy && setRouterPowerModal(null)}
+          title={routerPowerModal === 'reboot' ? 'Xác nhận Khởi động lại Router' : 'Xác nhận Tắt nguồn Router'}
+          maxWidth="max-w-md"
+        >
+          <div className="space-y-4">
+            <div className={`p-3.5 rounded-[var(--radius-sm)] border text-xs font-mono flex items-start gap-2.5 ${
+              routerPowerModal === 'reboot'
+                ? 'bg-sky-500/10 border-sky-500/30 text-sky-300'
+                : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+            }`}>
+              <span className="text-base">⚠️</span>
+              <div>
+                <p className="font-bold mb-1">
+                  {routerPowerModal === 'reboot'
+                    ? 'Bạn có chắc chắn muốn KHỞI ĐỘNG LẠI thiết bị Router MikroTik?'
+                    : 'Bạn có chắc chắn muốn TẮT NGUỒN thiết bị Router MikroTik?'}
+                </p>
+                <p className="opacity-90 leading-relaxed">
+                  {routerPowerModal === 'reboot'
+                    ? 'Toàn bộ kết nối mạng WiFi Hotspot và Internet sẽ tạm thời bị gián đoạn trong 30-60 giây khi Router khởi động lại.'
+                    : 'Router sẽ tắt nguồn hoàn toàn. Bạn cần bật lại nguồn điện vật lý để thiết bị hoạt động trở lại.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[var(--border-soft)]">
+              <button
+                type="button"
+                onClick={() => setRouterPowerModal(null)}
+                disabled={routerPowerBusy}
+                className="btn btn-secondary btn-sm"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteRouterPower}
+                disabled={routerPowerBusy}
+                className={`btn btn-sm ${routerPowerModal === 'reboot' ? 'btn-primary' : 'btn-danger'}`}
+              >
+                {routerPowerBusy ? (
+                  <Spinner size="xs" />
+                ) : routerPowerModal === 'reboot' ? (
+                  '🔄 Xác nhận Khởi động lại'
+                ) : (
+                  '🛑 Xác nhận Tắt nguồn'
+                )}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
     </div>
   );
 }
@@ -584,10 +833,22 @@ function RealtimeLineChart({ data = [], series = [], maxVal = null, unit = '' })
   return (
     <div className="h-full w-full">
       <svg className="h-full w-full overflow-visible" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-        {/* Lưới ngang */}
-        {[0, 0.5, 1].map((ratio) => {
+        {/* Lưới ngang vạch chia */}
+        {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
           const y = paddingY + chartH * (1 - ratio);
-          const labelVal = Math.round(computedMax * ratio);
+          const rawVal = computedMax * ratio;
+          let labelText = '';
+          if (ratio === 0) {
+            labelText = '0';
+          } else if (unit === '%') {
+            labelText = `${Math.round(rawVal)}%`;
+          } else if (computedMax >= 10) {
+            labelText = `${Math.round(rawVal)} ${unit}`;
+          } else if (computedMax >= 1) {
+            labelText = `${rawVal.toFixed(1)} ${unit}`;
+          } else {
+            labelText = `${Math.round(rawVal * 1000)} Kbps`;
+          }
           return (
             <g key={ratio}>
               <line
@@ -596,15 +857,17 @@ function RealtimeLineChart({ data = [], series = [], maxVal = null, unit = '' })
                 x2={width - 10}
                 y2={y}
                 stroke="var(--border-soft)"
-                strokeDasharray="3 3"
+                strokeDasharray={ratio === 0 ? 'none' : '3 3'}
+                strokeWidth={ratio === 0 ? '1' : '0.8'}
+                strokeOpacity={ratio === 0 ? '0.6' : '0.35'}
               />
               <text
                 x={paddingX - 6}
                 y={y + 3}
                 textAnchor="end"
-                className="fill-[var(--text-faint)] text-[9px] font-mono"
+                className="fill-[var(--text-faint)] text-[8.5px] font-mono select-none"
               >
-                {labelVal}{unit}
+                {labelText}
               </text>
             </g>
           );

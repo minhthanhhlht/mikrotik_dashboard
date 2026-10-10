@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 import { useApi } from '../hooks/useApi.js';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { useToast } from '../hooks/useToast.jsx';
+import { useLanguage } from '../context/LanguageContext.jsx';
 import Modal from '../components/Modal.jsx';
 import Spinner from '../components/Spinner.jsx';
 
@@ -29,6 +30,7 @@ function Field({ label, children, hint }) {
 
 export default function ProfilesPage() {
   const { canManageProfiles } = useAuth();
+  const { t } = useLanguage();
   const toast = useToast();
   const { data: profiles = [], loading, error, reload } = useApi(api.profiles);
   const [formOpen, setFormOpen] = useState(false);
@@ -73,7 +75,7 @@ export default function ProfilesPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!form.name.trim()) {
-      setFormError('Vui lòng nhập tên hồ sơ.');
+      setFormError(t('profiles.fieldName'));
       return;
     }
     setFormBusy(true);
@@ -90,30 +92,30 @@ export default function ProfilesPage() {
       if (editing) {
         delete body.name;
         await api.updateProfile(editing['.id'], body);
-        toast.success(`Đã cập nhật hồ sơ "${editing.name}"`, 'Cập nhật thành công');
+        toast.success(editing.name, t('common.update'));
       } else {
         await api.createProfile(body);
-        toast.success(`Đã tạo hồ sơ hotspot "${body.name}"`, 'Tạo thành công');
+        toast.success(body.name, t('common.create'));
       }
       setFormOpen(false);
       reload();
     } catch (err) {
       setFormError(err.message);
-      toast.error(err.message, 'Lỗi thao tác');
+      toast.error(err.message, t('common.error'));
     } finally {
       setFormBusy(false);
     }
   }
 
   async function handleDelete(p) {
-    if (!window.confirm(`Xóa hồ sơ "${p.name}"? Người dùng thuộc hồ sơ này có thể bị lỗi.`)) return;
+    if (!window.confirm(t('profiles.deleteConfirm', { name: p.name }))) return;
     setBusyId(p['.id']);
     try {
       await api.deleteProfile(p['.id']);
-      toast.success(`Đã xóa hồ sơ "${p.name}"`, 'Xóa thành công');
+      toast.success(p.name, t('common.delete'));
       reload();
     } catch (err) {
-      toast.error(`Lỗi xóa: ${err.message}`, 'Xóa thất bại');
+      toast.error(err.message, t('common.error'));
     } finally {
       setBusyId(null);
     }
@@ -124,14 +126,14 @@ export default function ProfilesPage() {
       {/* Topbar */}
       <div className="sk-topbar flex-wrap">
         <div>
-          <h1 className="sk-title">Hồ sơ gói cước (Profiles)</h1>
+          <h1 className="sk-title">{t('profiles.title')}</h1>
           <p className="sk-subtitle font-mono">
-            Quản lý /ip/hotspot/user/profile · Giới hạn tốc độ, thời gian, MAC cookie
+            {t('profiles.subtitle')}
           </p>
         </div>
         {canManageProfiles && (
           <button onClick={openCreate} className="btn btn-primary btn-sm">
-            + Thêm hồ sơ
+            {t('profiles.addProfile')}
           </button>
         )}
       </div>
@@ -143,44 +145,43 @@ export default function ProfilesPage() {
             name="profilesSearch"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Tìm hồ sơ…"
+            placeholder={t('profiles.searchPlaceholder')}
             className="form-input text-xs h-8"
           />
         </div>
         <span className="font-mono text-xs text-[var(--text-faint)]">
-          {filtered.length}/{profiles.length} hồ sơ
+          {t('profiles.showingCount', { filtered: filtered.length, total: profiles.length })}
         </span>
       </div>
 
       {error ? (
         <div className="rounded-[var(--radius-lg)] border border-[rgba(251,111,111,0.3)] bg-[var(--red-bg)] p-4 text-xs">
-          <p className="font-semibold text-[var(--red)]">Không lấy được danh sách hồ sơ.</p>
-          <p className="mt-1 text-[var(--text-dim)]">{error}</p>
+          <p className="font-semibold text-[var(--red)]">{error}</p>
           <button onClick={reload} className="btn btn-danger btn-sm mt-3">
-            ⟳ Thử lại
+            ⟳ {t('common.retry')}
           </button>
         </div>
       ) : loading ? (
-        <Spinner label="Đang tải danh sách hồ sơ…" />
+        <Spinner label={t('common.loading')} />
       ) : (
         <div className="sk-card p-0 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="sk-dtable">
               <thead>
                 <tr>
-                  <th>Tên hồ sơ</th>
-                  <th>Tốc độ (rate-limit)</th>
-                  <th>Số user dùng chung</th>
-                  <th>Idle timeout</th>
-                  <th>MAC cookie</th>
-                  <th className="text-right">Thao tác</th>
+                  <th>{t('profiles.colName')}</th>
+                  <th>{t('profiles.colRateLimit')}</th>
+                  <th>{t('profiles.colSharedUsers')}</th>
+                  <th>{t('profiles.colIdleTimeout')}</th>
+                  <th>{t('profiles.colMacCookie')}</th>
+                  <th className="text-right">{t('common.actions')}</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 && (
                   <tr>
                     <td colSpan={6} className="py-12 text-center font-mono text-xs text-[var(--text-faint)]">
-                      Không có hồ sơ nào.
+                      {t('profiles.noProfiles')}
                     </td>
                   </tr>
                 )}
@@ -198,7 +199,7 @@ export default function ProfilesPage() {
                       {p['rate-limit'] ? (
                         <span className="sk-state sk-state--cyan text-[10px]">{p['rate-limit']}</span>
                       ) : (
-                        <span className="text-[var(--text-faint)]">Không giới hạn</span>
+                        <span className="text-[var(--text-faint)]">{t('common.unlimited')}</span>
                       )}
                     </td>
                     <td className="font-mono text-xs text-[var(--text-dim)]">{p['shared-users'] || '1'}</td>
@@ -206,30 +207,29 @@ export default function ProfilesPage() {
                     <td>
                       {p['add-mac-cookie'] === 'true' ? (
                         <span className="sk-pill sk-pill--green text-[10px] py-0 px-1.5">
-                          <span className="sk-pill__dot" /> {p['mac-cookie-timeout'] || 'Bật'}
+                          <span className="sk-pill__dot" /> {p['mac-cookie-timeout'] || 'ON'}
                         </span>
                       ) : (
-                        <span className="font-mono text-xs text-[var(--text-faint)]">Tắt</span>
+                        <span className="font-mono text-xs text-[var(--text-faint)]">OFF</span>
                       )}
                     </td>
                     <td className="text-right">
                       {canManageProfiles ? (
                         <div className="flex items-center justify-end gap-1.5 font-mono text-xs">
                           <button onClick={() => openEdit(p)} className="btn btn-secondary btn-sm h-7 px-2 text-[11px]">
-                            Sửa
+                            {t('common.edit')}
                           </button>
                           <button
                             onClick={() => handleDelete(p)}
                             disabled={busyId === p['.id'] || p.default === 'true'}
                             className="btn btn-ghost btn-sm h-7 px-2 text-[11px] text-[var(--red)] hover:bg-[var(--red-bg)] disabled:opacity-30"
-                            title={p.default === 'true' ? 'Không xóa được hồ sơ mặc định' : undefined}
                           >
-                            {busyId === p['.id'] ? '…' : 'Xóa'}
+                            {busyId === p['.id'] ? '…' : t('common.delete')}
                           </button>
                         </div>
                       ) : (
                         <span className="font-mono text-xs text-[var(--text-faint)]">
-                          READ ONLY
+                          {t('common.readOnly')}
                         </span>
                       )}
                     </td>
@@ -244,15 +244,15 @@ export default function ProfilesPage() {
       {/* Modal tạo / sửa hồ sơ */}
       <Modal
         open={formOpen}
-        title={editing ? `Sửa hồ sơ "${editing.name}"` : 'Thêm hồ sơ mới'}
+        title={editing ? t('profiles.modalEditTitle', { name: editing.name }) : t('profiles.modalCreateTitle')}
         onClose={() => setFormOpen(false)}
         footer={
           <>
             <button onClick={() => setFormOpen(false)} className="btn btn-secondary btn-sm">
-              Hủy
+              {t('common.cancel')}
             </button>
             <button onClick={handleSubmit} disabled={formBusy} className="btn btn-primary btn-sm">
-              {formBusy ? 'Đang lưu…' : editing ? 'Cập nhật' : 'Tạo hồ sơ'}
+              {formBusy ? t('common.saving') : editing ? t('common.update') : t('common.create')}
             </button>
           </>
         }
@@ -264,7 +264,7 @@ export default function ProfilesPage() {
             </div>
           )}
 
-          <Field label="Tên hồ sơ *">
+          <Field label={t('profiles.fieldName')}>
             <input
               id="profile-name"
               name="name"
@@ -278,7 +278,7 @@ export default function ProfilesPage() {
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Giới hạn tốc độ (rate-limit)" hint="vd: 10M/10M, 5M/2M">
+            <Field label={t('profiles.fieldRateLimit')} hint={t('profiles.fieldRateLimitHint')}>
               <input
                 id="profile-rate"
                 name="rate-limit"
@@ -288,7 +288,7 @@ export default function ProfilesPage() {
                 placeholder="vd: 10M/10M"
               />
             </Field>
-            <Field label="Số user dùng chung" hint="vd: 1, 5, unlimited">
+            <Field label={t('profiles.fieldSharedUsers')} hint="vd: 1, 5">
               <input
                 id="profile-shared"
                 name="shared-users"
@@ -301,7 +301,7 @@ export default function ProfilesPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Idle timeout">
+            <Field label={t('profiles.fieldIdleTimeout')}>
               <input
                 id="profile-idle"
                 name="idle-timeout"
@@ -311,7 +311,7 @@ export default function ProfilesPage() {
                 placeholder="vd: 5m, none"
               />
             </Field>
-            <Field label="Keepalive timeout">
+            <Field label={t('profiles.fieldKeepaliveTimeout')}>
               <input
                 id="profile-keepalive"
                 name="keepalive-timeout"
@@ -324,7 +324,7 @@ export default function ProfilesPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="MAC cookie timeout">
+            <Field label={t('profiles.fieldMacCookieTimeout')}>
               <input
                 id="profile-maccookie"
                 name="mac-cookie-timeout"
@@ -334,7 +334,7 @@ export default function ProfilesPage() {
                 placeholder="vd: 3d"
               />
             </Field>
-            <Field label="Address list" hint="Tên address-list để kiểm soát">
+            <Field label={t('profiles.fieldAddressList')}>
               <input
                 id="profile-addresslist"
                 name="address-list"
@@ -352,7 +352,7 @@ export default function ProfilesPage() {
               checked={form['add-mac-cookie'] === 'true'}
               onChange={(e) => set('add-mac-cookie', e.target.checked ? 'true' : 'false')}
             />
-            <span className="text-xs text-[var(--text-dim)]">Bật MAC cookie (đăng nhập tự động không hỏi lại)</span>
+            <span className="text-xs text-[var(--text-dim)]">{t('profiles.fieldAddMacCookie')}</span>
           </label>
         </form>
       </Modal>

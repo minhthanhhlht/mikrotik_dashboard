@@ -1,0 +1,27 @@
+services:
+  mikrotik-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mikrotik-dashboard
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - MTIK_SCHEME=http
+      - MTIK_HOST=192.168.20.1
+      - MTIK_PORT=80
+      - MTIK_USER=user_api
+      - MTIK_PASS=MatKhauCuaBan123
+      - AUTH_SOURCE=routeros # routeros | env | both
+      - ADMIN_USER=admin
+      - ADMIN_PASS=Admin@123
+    volumes:
+      - mikrotik_data:/app/backend/data
+
+volumes:
+  mikrotik_data:
+    name: mikrotik_dashboard_data
+

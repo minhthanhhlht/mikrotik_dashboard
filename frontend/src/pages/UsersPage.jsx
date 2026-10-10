@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 import { useApi } from '../hooks/useApi.js';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { useToast } from '../hooks/useToast.jsx';
+import { useLanguage } from '../context/LanguageContext.jsx';
 import Modal from '../components/Modal.jsx';
 import Spinner from '../components/Spinner.jsx';
 import CustomSelect from '../components/CustomSelect.jsx';
@@ -41,6 +42,7 @@ function Field({ label, children, hint }) {
 
 export default function UsersPage() {
   const { canManageUsers, canManageProfiles, isViewer } = useAuth();
+  const { language, t } = useLanguage();
   const toast = useToast();
 
   const [activeTab, setActiveTab] = useState('users');
@@ -90,7 +92,7 @@ export default function UsersPage() {
   function copyPassword(pass, userName) {
     if (!pass) return;
     navigator.clipboard.writeText(pass);
-    toast.success(`Đã sao chép mật khẩu của "${userName}"`, 'Đã sao chép');
+    toast.success(t('users.copiedPass', { name: userName }), t('common.copied'));
   }
 
   function openCreate() {
@@ -164,7 +166,7 @@ export default function UsersPage() {
   async function handleSubmitProfile(e) {
     if (e && e.preventDefault) e.preventDefault();
     if (!profileForm.name.trim()) {
-      setProfileFormError('Vui lòng nhập tên hồ sơ.');
+      setProfileFormError(t('profiles.fieldName'));
       return;
     }
     setProfileFormBusy(true);
@@ -181,10 +183,10 @@ export default function UsersPage() {
       if (profileEditing) {
         delete body.name;
         await api.updateProfile(profileEditing['.id'], body);
-        toast.success(`Đã cập nhật hồ sơ "${profileEditing.name}"`, 'Cập nhật thành công');
+        toast.success(profileEditing.name, t('common.update'));
       } else {
         await api.createProfile(body);
-        toast.success(`Đã tạo hồ sơ hotspot "${body.name}"`, 'Tạo thành công');
+        toast.success(body.name, t('common.create'));
         if (createProfileForUserForm) {
           set('profile', body.name);
         }
@@ -193,7 +195,7 @@ export default function UsersPage() {
       reloadProfiles();
     } catch (err) {
       setProfileFormError(err.message);
-      toast.error(err.message, 'Lỗi thao tác');
+      toast.error(err.message, t('common.error'));
     } finally {
       setProfileFormBusy(false);
     }
@@ -204,11 +206,11 @@ export default function UsersPage() {
     setProfileBusyId(deletingProfile['.id']);
     try {
       await api.deleteProfile(deletingProfile['.id']);
-      toast.success(`Đã xóa hồ sơ "${deletingProfile.name}"`, 'Xóa thành công');
+      toast.success(deletingProfile.name, t('common.delete'));
       setDeletingProfile(null);
       reloadProfiles();
     } catch (err) {
-      toast.error(`Lỗi xóa hồ sơ: ${err.message}`, 'Xóa thất bại');
+      toast.error(err.message, t('common.error'));
     } finally {
       setProfileBusyId(null);
     }
@@ -257,25 +259,25 @@ export default function UsersPage() {
     setExtendBusy(true);
     try {
       await api.extendUser(extending['.id'], extendTime.trim());
-      toast.success(`Đã gia hạn tài khoản "${extending.name}" thêm ${extendTime.trim()}`, 'Gia hạn thành công');
+      toast.success(`${extending.name} (+${extendTime.trim()})`, t('common.success'));
       setExtending(null);
       reload();
     } catch (err) {
-      toast.error(`Lỗi gia hạn: ${err.message}`, 'Gia hạn thất bại');
+      toast.error(err.message, t('common.error'));
     } finally {
       setExtendBusy(false);
     }
   }
 
   async function handleReset(u) {
-    if (!window.confirm(`Reset bộ đếm dung lượng đã dùng của "${u.name}"?`)) return;
+    if (!window.confirm(t('users.resetConfirm', { name: u.name }))) return;
     setBusyId(u['.id']);
     try {
       await api.resetUser(u['.id']);
-      toast.success(`Đã reset bộ đếm dung lượng cho "${u.name}"`, 'Reset thành công');
+      toast.success(u.name, t('common.success'));
       reload();
     } catch (err) {
-      toast.error(`Lỗi reset: ${err.message}`, 'Reset thất bại');
+      toast.error(err.message, t('common.error'));
     } finally {
       setBusyId(null);
     }
@@ -294,13 +296,13 @@ export default function UsersPage() {
     a.download = `hotspot-users-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.info(`Đã xuất ${users.length} tài khoản ra file CSV`, 'Xuất dữ liệu');
+    toast.info(`${users.length} users exported to CSV`, t('users.exportCsv'));
   }
 
   async function printCards(customUsers = null) {
     const listToPrint = customUsers || users.filter((u) => selectedIds.has(u['.id']));
     if (!listToPrint || listToPrint.length === 0) {
-      toast.warning('Vui lòng tích chọn ít nhất 1 người dùng trong bảng trước khi in thẻ!', 'Chưa chọn người dùng');
+      toast.warning('Please select at least 1 user to print cards!', t('common.warning'));
       return;
     }
 
@@ -308,7 +310,7 @@ export default function UsersPage() {
       locationName: 'MikroTik Hotspot',
       ssid: 'WIFI_HOTSPOT',
       hotline: '',
-      footerText: 'Chúc quý khách truy cập mạng vui vẻ!',
+      footerText: 'Enjoy high speed internet!',
     };
     try {
       const serverSettings = await api.getSettings();
@@ -330,19 +332,19 @@ export default function UsersPage() {
         (u) => `
           <div class="card">
             ${voucher.locationName ? `<div class="location">🏢 ${escapeHtml(voucher.locationName)}</div>` : ''}
-            <div class="ssid">📶 WiFi (SSID): <b>${escapeHtml(voucher.ssid || 'WIFI_HOTSPOT')}</b></div>
-            ${voucher.loginUrl ? `<div class="login-url">🌐 Đăng nhập tại: <b>${escapeHtml(voucher.loginUrl)}</b></div>` : ''}
+            <div class="ssid">📶 ${t('settings.wifiSsidLabel')} <b>${escapeHtml(voucher.ssid || 'WIFI_HOTSPOT')}</b></div>
+            ${voucher.loginUrl ? `<div class="login-url">🌐 ${t('settings.loginAtLabel')} <b>${escapeHtml(voucher.loginUrl)}</b></div>` : ''}
             <div class="divider"></div>
-            <div class="row"><span>👤 Tài khoản:</span><b class="highlight">${escapeHtml(u.name || '')}</b></div>
-            <div class="row"><span>🔑 Mật khẩu:</span><b class="highlight">${escapeHtml(u.password || '(Trống)')}</b></div>
-            ${u['limit-uptime'] ? `<div class="row"><span>⏱️ Thời gian:</span><b>${escapeHtml(formatDuration(u['limit-uptime']))}</b></div>` : ''}
-            ${u['limit-bytes-total'] ? `<div class="row"><span>📊 Dung lượng:</span><b>${escapeHtml(formatBytes(u['limit-bytes-total']))}</b></div>` : ''}
-            ${voucher.hotline ? `<div class="row hotline"><span>📞 Hotline:</span><b>${escapeHtml(voucher.hotline)}</b></div>` : ''}
+            <div class="row"><span>👤 ${t('settings.userLabel')}</span><b class="highlight">${escapeHtml(u.name || '')}</b></div>
+            <div class="row"><span>🔑 ${t('settings.passLabel')}</span><b class="highlight">${escapeHtml(u.password || t('common.empty'))}</b></div>
+            ${u['limit-uptime'] ? `<div class="row"><span>⏱️ ${t('settings.uptimeLabel')}</span><b>${escapeHtml(formatDuration(u['limit-uptime'], language))}</b></div>` : ''}
+            ${u['limit-bytes-total'] ? `<div class="row"><span>📊 ${t('settings.bytesLabel')}</span><b>${escapeHtml(formatBytes(u['limit-bytes-total']))}</b></div>` : ''}
+            ${voucher.hotline ? `<div class="row hotline"><span>📞 ${t('settings.hotlineLabel')}</span><b>${escapeHtml(voucher.hotline)}</b></div>` : ''}
             ${voucher.footerText ? `<div class="footer">${escapeHtml(voucher.footerText)}</div>` : ''}
           </div>`
       )
       .join('');
-    const html = `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Thẻ WiFi Hotspot - ${escapeHtml(voucher.locationName || 'MikroTik')}</title>
+    const html = `<!doctype html><html lang="${language}"><head><meta charset="utf-8"><title>WiFi Cards - ${escapeHtml(voucher.locationName || 'MikroTik')}</title>
       <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; background: #fff; color: #0f172a; }
         h2 { text-align: center; margin-bottom: 20px; font-size: 18px; font-weight: bold; }
@@ -363,7 +365,7 @@ export default function UsersPage() {
           .card { background: #fff; border-color: #94a3b8; }
         }
       </style></head><body>
-      <h2>Thẻ Truy Cập WiFi — ${escapeHtml(voucher.locationName || 'Hotspot')} (${listToPrint.length} thẻ)</h2>
+      <h2>${t('settings.printHeaderTitle', { name: escapeHtml(voucher.locationName || 'Hotspot') })} (${listToPrint.length} cards)</h2>
       <div class="grid">${cards}</div>
       <script>window.print();<${'/script'}>
     </body></html>`;
@@ -373,7 +375,7 @@ export default function UsersPage() {
       w.document.close();
       w.focus();
     }
-    toast.info(`Đang mở cửa sổ in ${listToPrint.length} thẻ WiFi voucher`, 'In thẻ WiFi');
+    toast.info(`${listToPrint.length} cards`, t('users.printCards'));
   }
 
   function escapeHtml(s) {
@@ -385,7 +387,7 @@ export default function UsersPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!form.name.trim()) {
-      setFormError('Vui lòng nhập tên người dùng.');
+      setFormError(t('users.fieldName'));
       return;
     }
     setFormBusy(true);
@@ -395,16 +397,16 @@ export default function UsersPage() {
       if (editing) {
         if (!body.password) delete body.password;
         await api.updateUser(editing['.id'], body);
-        toast.success(`Đã cập nhật thông tin người dùng "${body.name}"`, 'Cập nhật thành công');
+        toast.success(body.name, t('common.update'));
       } else {
         await api.createUser(body);
-        toast.success(`Đã tạo người dùng hotspot "${body.name}"`, 'Tạo thành công');
+        toast.success(body.name, t('common.create'));
       }
       setFormOpen(false);
       reload();
     } catch (err) {
       setFormError(err.message);
-      toast.error(err.message, 'Lỗi thao tác');
+      toast.error(err.message, t('common.error'));
     } finally {
       setFormBusy(false);
     }
@@ -414,9 +416,9 @@ export default function UsersPage() {
     if (!deleting) return;
     try {
       await api.deleteUser(deleting['.id']);
-      toast.success(`Đã xóa người dùng "${deleting.name}"`, 'Xóa thành công');
+      toast.success(deleting.name, t('common.delete'));
     } catch (err) {
-      toast.error(`Lỗi khi xóa "${deleting.name}": ${err.message}`, 'Xóa thất bại');
+      toast.error(err.message, t('common.error'));
     }
     setDeleting(null);
     reload();
@@ -428,12 +430,12 @@ export default function UsersPage() {
       <div className="sk-topbar flex-wrap">
         <div>
           <h1 className="sk-title">
-            {activeTab === 'users' ? 'Người dùng Hotspot' : 'Hồ sơ gói cước (Profiles)'}
+            {activeTab === 'users' ? t('users.titleUsers') : t('users.titleProfiles')}
           </h1>
           <p className="sk-subtitle font-mono">
             {activeTab === 'users'
-              ? 'Quản lý tài khoản trong /ip/hotspot/user'
-              : 'Quản lý băng thông và hạn ngạch trong /ip/hotspot/user/profile'}
+              ? t('users.subtitleUsers')
+              : t('users.subtitleProfiles')}
           </p>
         </div>
 
@@ -444,7 +446,7 @@ export default function UsersPage() {
                 <path d="M10 3a1 1 0 011 1v8.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 111.414-1.414L9 12.586V4a1 1 0 011-1z" />
                 <path d="M4 15a1 1 0 011 1v1h10v-1a1 1 0 112 0v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2a1 1 0 011-1z" />
               </svg>
-              Xuất CSV
+              {t('users.exportCsv')}
             </button>
             <button
               onClick={() => printCards()}
@@ -453,11 +455,13 @@ export default function UsersPage() {
               <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
                 <path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v2h1a2 2 0 012 2v5a2 2 0 01-2 2h-1v2a2 2 0 01-2 2H7a2 2 0 01-2-2v-2H4a2 2 0 01-2-2V8a2 2 0 012-2h1V4zm9 4H6v8h8V8z" />
               </svg>
-              In thẻ WiFi {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
+              {selectedIds.size > 0
+                ? t('users.printSelected', { count: selectedIds.size })
+                : t('users.printCards')}
             </button>
             {canManageUsers && (
               <button onClick={openCreate} className="btn btn-primary btn-sm">
-                + Thêm người dùng
+                {t('users.addUser')}
               </button>
             )}
           </div>
@@ -470,11 +474,11 @@ export default function UsersPage() {
               disabled={loadingProfiles}
               className="btn btn-secondary btn-sm"
             >
-              {loadingProfiles ? <Spinner size="xs" /> : '⟳'} Làm mới
+              {loadingProfiles ? <Spinner size="xs" /> : '⟳'} {t('common.refresh')}
             </button>
             {canManageProfiles && (
               <button onClick={() => openCreateProfile(false)} className="btn btn-primary btn-sm">
-                + Thêm hồ sơ mới
+                {t('users.createProfile')}
               </button>
             )}
           </div>
@@ -488,7 +492,7 @@ export default function UsersPage() {
           onClick={() => setActiveTab('users')}
           className={`sk-seg__btn ${activeTab === 'users' ? 'is-on' : ''}`}
         >
-          <span>👥 Người dùng</span>
+          <span>👥 {t('users.tabUsers')}</span>
           <span className="sk-seg__count">{users.length}</span>
         </button>
 
@@ -497,7 +501,7 @@ export default function UsersPage() {
           onClick={() => setActiveTab('profiles')}
           className={`sk-seg__btn ${activeTab === 'profiles' ? 'is-on' : ''}`}
         >
-          <span>⚡ Hồ sơ (Profiles)</span>
+          <span>⚡ {t('users.tabProfiles')}</span>
           <span className="sk-seg__count">{profiles.length}</span>
         </button>
       </div>
@@ -513,7 +517,7 @@ export default function UsersPage() {
                   name="usersSearch"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Tìm theo tên / ghi chú…"
+                  placeholder={t('users.searchPlaceholder')}
                   className="form-input text-xs h-8"
                 />
               </div>
@@ -523,11 +527,11 @@ export default function UsersPage() {
                 name="usersProfileFilter"
                 value={profileFilter}
                 onChange={(e) => setProfileFilter(e.target.value)}
-                placeholder="Tất cả profile"
+                placeholder={t('users.allProfiles')}
                 className="w-44"
                 buttonClassName="h-8 text-xs"
                 options={[
-                  { value: '', label: 'Tất cả profile', badge: `${users.length}` },
+                  { value: '', label: t('users.allProfiles'), badge: `${users.length}` },
                   ...profileNames.map((p) => {
                     const count = users.filter((u) => profileOf(u) === p).length;
                     return {
@@ -540,21 +544,20 @@ export default function UsersPage() {
               />
 
               <span className="font-mono text-xs text-[var(--text-faint)]">
-                Hiển thị {filtered.length}/{users.length}
+                {t('users.showingCount', { filtered: filtered.length, total: users.length })}
               </span>
             </div>
           </div>
 
           {error ? (
             <div className="rounded-[var(--radius-lg)] border border-[rgba(251,111,111,0.3)] bg-[var(--red-bg)] p-4 text-xs">
-              <p className="font-semibold text-[var(--red)]">Không lấy được danh sách người dùng.</p>
-              <p className="mt-1 text-[var(--text-dim)]">{error}</p>
+              <p className="font-semibold text-[var(--red)]">{error}</p>
               <button onClick={reload} className="btn btn-danger btn-sm mt-3">
-                ⟳ Thử lại
+                ⟳ {t('common.retry')}
               </button>
             </div>
           ) : loading ? (
-            <Spinner label="Đang tải người dùng hotspot…" />
+            <Spinner label={t('common.loading')} />
           ) : (
             <div className="sk-card p-0 overflow-hidden">
               <div className="overflow-x-auto">
@@ -564,37 +567,37 @@ export default function UsersPage() {
                       <th className="w-10 text-center">
                         <input
                           type="checkbox"
-                          aria-label="Chọn tất cả người dùng"
+                          aria-label="Select all"
                           checked={isAllSelected}
                           onChange={toggleSelectAll}
                         />
                       </th>
-                      <th>Người dùng</th>
+                      <th>{t('users.colUser')}</th>
                       <th>
                         <div className="flex items-center gap-1.5">
-                          <span>Mật khẩu</span>
+                          <span>{t('users.colPassword')}</span>
                           <button
                             type="button"
                             onClick={() => setShowAllPasswords((v) => !v)}
                             className="text-[10px] font-mono text-[var(--accent)] hover:underline opacity-80 hover:opacity-100"
-                            title={showAllPasswords ? 'Ẩn tất cả mật khẩu' : 'Hiện tất cả mật khẩu'}
+                            title={showAllPasswords ? t('users.hidePass') : t('users.revealPass')}
                           >
-                            {showAllPasswords ? 'Ẩn' : 'Hiện'}
+                            {showAllPasswords ? t('common.hide') : t('common.show')}
                           </button>
                         </div>
                       </th>
-                      <th>Profile</th>
-                      <th>Giới hạn thời gian</th>
-                      <th>Giới hạn dung lượng</th>
-                      <th>Trạng thái</th>
-                      <th className="text-right">Thao tác</th>
+                      <th>{t('users.colProfile')}</th>
+                      <th>{t('users.colUptimeLimit')}</th>
+                      <th>{t('users.colBytesLimit')}</th>
+                      <th>{t('users.colStatus')}</th>
+                      <th className="text-right min-w-[280px]">{t('users.colActions')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filtered.length === 0 && (
                       <tr>
                         <td colSpan={8} className="py-12 text-center font-mono text-xs text-[var(--text-faint)]">
-                          Không có người dùng nào.
+                          {t('users.noUsers')}
                         </td>
                       </tr>
                     )}
@@ -606,7 +609,7 @@ export default function UsersPage() {
                         <td className="w-10 text-center">
                           <input
                             type="checkbox"
-                            aria-label={`Chọn ${u.name}`}
+                            aria-label={`Select ${u.name}`}
                             checked={selectedIds.has(u['.id'])}
                             onChange={() => toggleSelect(u['.id'])}
                           />
@@ -627,7 +630,7 @@ export default function UsersPage() {
                                 type="button"
                                 onClick={() => toggleRevealPassword(u['.id'])}
                                 className="text-[11px] text-[var(--text-faint)] hover:text-[var(--text)] transition-colors p-0.5"
-                                title={revealedPasswords.has(u['.id']) || showAllPasswords ? 'Ẩn mật khẩu' : 'Xem mật khẩu'}
+                                title={revealedPasswords.has(u['.id']) || showAllPasswords ? t('users.hidePass') : t('users.revealPass')}
                               >
                                 {revealedPasswords.has(u['.id']) || showAllPasswords ? '👁️' : '👁️‍🗨️'}
                               </button>
@@ -635,14 +638,14 @@ export default function UsersPage() {
                                 type="button"
                                 onClick={() => copyPassword(u.password, u.name)}
                                 className="text-[11px] text-[var(--text-faint)] hover:text-[var(--accent)] transition-colors p-0.5"
-                                title="Sao chép mật khẩu"
+                                title={t('users.copyPass')}
                               >
                                 📋
                               </button>
                             </div>
                           ) : (
                             <span className="font-mono text-[11px] text-[var(--text-faint)] italic">
-                              (Trống)
+                              {t('common.empty')}
                             </span>
                           )}
                         </td>
@@ -659,7 +662,7 @@ export default function UsersPage() {
                           </button>
                         </td>
                         <td className="font-mono text-xs text-[var(--text-dim)]">
-                          {u['limit-uptime'] ? formatDuration(u['limit-uptime']) : '—'}
+                          {u['limit-uptime'] ? formatDuration(u['limit-uptime'], language) : '—'}
                         </td>
                         <td className="font-mono text-xs text-[var(--text-dim)]">
                           {u['limit-bytes-total'] ? formatBytes(u['limit-bytes-total']) : '—'}
@@ -669,44 +672,44 @@ export default function UsersPage() {
                             className={`sk-pill ${u.disabled === 'true' ? 'sk-pill--red' : 'sk-pill--green'} text-[10px] py-0 px-2`}
                           >
                             <span className="sk-pill__dot" />
-                            {u.disabled === 'true' ? 'DISABLED' : 'ACTIVE'}
+                            {u.disabled === 'true' ? t('common.disabled') : t('common.active')}
                           </span>
                         </td>
-                        <td className="text-right">
+                        <td className="text-right whitespace-nowrap">
                           {isViewer ? (
                             <span className="font-mono text-xs text-[var(--text-faint)]">
-                              READ ONLY
+                              {t('common.readOnly')}
                             </span>
                           ) : (
                             <div className="flex items-center justify-end gap-1 font-mono text-xs">
                               <button
                                 onClick={() => printCards([u])}
                                 className="btn btn-ghost btn-sm h-7 px-2 text-[11px]"
-                                title="In riêng thẻ WiFi cho người dùng này"
+                                title={t('users.printSingle')}
                               >
-                                🖨️ In
+                                🖨️ {t('users.printSingle')}
                               </button>
                               <button
                                 onClick={() => setExtending(u)}
                                 className="btn btn-ghost btn-sm h-7 px-2 text-[11px] text-[var(--accent-bright)]"
                               >
-                                + Gia hạn
+                                {t('users.extend')}
                               </button>
                               <button
                                 onClick={() => handleReset(u)}
                                 disabled={busyId === u['.id']}
                                 className="btn btn-ghost btn-sm h-7 px-2 text-[11px] text-[var(--violet)]"
                               >
-                                {busyId === u['.id'] ? '…' : '↺ Reset'}
+                                {busyId === u['.id'] ? '…' : t('users.resetCounter')}
                               </button>
                               <button onClick={() => openEdit(u)} className="btn btn-secondary btn-sm h-7 px-2 text-[11px]">
-                                Sửa
+                                {t('common.edit')}
                               </button>
                               <button
                                 onClick={() => setDeleting(u)}
                                 className="btn btn-ghost btn-sm h-7 px-2 text-[11px] text-[var(--red)] hover:bg-[var(--red-bg)]"
                               >
-                                Xóa
+                                {t('common.delete')}
                               </button>
                             </div>
                           )}
@@ -723,20 +726,20 @@ export default function UsersPage() {
           {selectedIds.size > 0 && (
             <div className="sk-bulkbar">
               <span className="font-mono text-xs font-semibold text-[var(--text)]">
-                Đã chọn <b className="text-[var(--accent-bright)]">{selectedIds.size}</b> mục
+                {t('users.bulkSelected', { count: selectedIds.size })}
               </span>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => printCards()}
                   className="btn btn-primary btn-sm"
                 >
-                  🖨️ In {selectedIds.size} thẻ WiFi
+                  🖨️ {t('users.bulkPrint')} ({selectedIds.size})
                 </button>
                 <button
                   onClick={clearSelection}
                   className="btn btn-secondary btn-sm"
                 >
-                  Bỏ chọn
+                  {t('common.cancel')}
                 </button>
               </div>
             </div>
@@ -754,44 +757,43 @@ export default function UsersPage() {
                 name="profilesSearch"
                 value={profileSearch}
                 onChange={(e) => setProfileSearch(e.target.value)}
-                placeholder="Tìm theo tên hồ sơ…"
+                placeholder={t('profiles.searchPlaceholder')}
                 className="form-input text-xs h-8"
               />
             </div>
             <span className="font-mono text-xs text-[var(--text-faint)]">
-              {filteredProfiles.length}/{profiles.length} hồ sơ (/ip/hotspot/user/profile)
+              {t('profiles.showingCount', { filtered: filteredProfiles.length, total: profiles.length })}
             </span>
           </div>
 
           {errorProfiles ? (
             <div className="rounded-[var(--radius-lg)] border border-[rgba(251,111,111,0.3)] bg-[var(--red-bg)] p-4 text-xs">
-              <p className="font-semibold text-[var(--red)]">Không lấy được danh sách hồ sơ từ MikroTik.</p>
-              <p className="mt-1 text-[var(--text-dim)]">{errorProfiles}</p>
+              <p className="font-semibold text-[var(--red)]">{errorProfiles}</p>
               <button onClick={reloadProfiles} className="btn btn-danger btn-sm mt-3">
-                ⟳ Thử lại
+                ⟳ {t('common.retry')}
               </button>
             </div>
           ) : loadingProfiles ? (
-            <Spinner label="Đang tải danh sách hồ sơ từ MikroTik Router…" />
+            <Spinner label={t('common.loading')} />
           ) : (
             <div className="sk-card p-0 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="sk-dtable">
                   <thead>
                     <tr>
-                      <th>Tên hồ sơ</th>
-                      <th>Băng thông (rate-limit)</th>
-                      <th>Dùng chung (Shared)</th>
-                      <th>Idle Timeout</th>
-                      <th>MAC Cookie</th>
-                      <th className="text-right">Thao tác</th>
+                      <th>{t('profiles.colName')}</th>
+                      <th>{t('profiles.colRateLimit')}</th>
+                      <th>{t('profiles.colSharedUsers')}</th>
+                      <th>{t('profiles.colIdleTimeout')}</th>
+                      <th>{t('profiles.colMacCookie')}</th>
+                      <th className="text-right">{t('common.actions')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredProfiles.length === 0 && (
                       <tr>
                         <td colSpan={6} className="py-12 text-center font-mono text-xs text-[var(--text-faint)]">
-                          Không có hồ sơ nào.
+                          {t('profiles.noProfiles')}
                         </td>
                       </tr>
                     )}
@@ -809,7 +811,7 @@ export default function UsersPage() {
                           {p['rate-limit'] ? (
                             <span className="sk-state sk-state--cyan text-[10px]">{p['rate-limit']}</span>
                           ) : (
-                            <span className="text-[var(--text-faint)]">Không giới hạn</span>
+                            <span className="text-[var(--text-faint)]">{t('common.unlimited')}</span>
                           )}
                         </td>
                         <td className="font-mono text-xs text-[var(--text-dim)]">{p['shared-users'] || '1'}</td>
@@ -817,29 +819,29 @@ export default function UsersPage() {
                         <td>
                           {p['add-mac-cookie'] === 'true' ? (
                             <span className="sk-pill sk-pill--green text-[10px] py-0 px-1.5">
-                              <span className="sk-pill__dot" /> {p['mac-cookie-timeout'] || 'Bật'}
+                              <span className="sk-pill__dot" /> {p['mac-cookie-timeout'] || 'ON'}
                             </span>
                           ) : (
-                            <span className="font-mono text-xs text-[var(--text-faint)]">Tắt</span>
+                            <span className="font-mono text-xs text-[var(--text-faint)]">OFF</span>
                           )}
                         </td>
                         <td className="text-right">
                           {canManageProfiles ? (
                             <div className="flex items-center justify-end gap-1.5 font-mono text-xs">
                               <button onClick={() => openEditProfile(p)} className="btn btn-secondary btn-sm h-7 px-2 text-[11px]">
-                                Sửa
+                                {t('common.edit')}
                               </button>
                               <button
                                 onClick={() => setDeletingProfile(p)}
                                 disabled={profileBusyId === p['.id'] || p.default === 'true'}
                                 className="btn btn-ghost btn-sm h-7 px-2 text-[11px] text-[var(--red)] hover:bg-[var(--red-bg)] disabled:opacity-30"
                               >
-                                {profileBusyId === p['.id'] ? '…' : 'Xóa'}
+                                {profileBusyId === p['.id'] ? '…' : t('common.delete')}
                               </button>
                             </div>
                           ) : (
                             <span className="font-mono text-xs text-[var(--text-faint)]">
-                              READ ONLY
+                              {t('common.readOnly')}
                             </span>
                           )}
                         </td>
@@ -856,15 +858,15 @@ export default function UsersPage() {
       {/* Modal tạo / sửa User */}
       <Modal
         open={formOpen}
-        title={editing ? `Sửa người dùng "${editing.name}"` : 'Thêm người dùng mới'}
+        title={editing ? t('users.modalEditTitle', { name: editing.name }) : t('users.modalCreateTitle')}
         onClose={() => setFormOpen(false)}
         footer={
           <>
             <button onClick={() => setFormOpen(false)} className="btn btn-secondary btn-sm">
-              Hủy
+              {t('common.cancel')}
             </button>
             <button onClick={handleSubmit} disabled={formBusy} className="btn btn-primary btn-sm">
-              {formBusy ? 'Đang lưu…' : editing ? 'Cập nhật' : 'Tạo người dùng'}
+              {formBusy ? t('common.saving') : editing ? t('common.update') : t('common.create')}
             </button>
           </>
         }
@@ -876,22 +878,22 @@ export default function UsersPage() {
             </div>
           )}
 
-          <Field label="Tên người dùng *">
+          <Field label={t('users.fieldName')}>
             <input
               id="user-name"
               name="name"
               className="form-input"
               value={form.name}
               onChange={(e) => set('name', e.target.value)}
-              placeholder="vd: khach-01"
+              placeholder="vd: guest-01"
               autoFocus
               disabled={!!editing}
             />
           </Field>
 
           <Field
-            label="Mật khẩu"
-            hint={editing ? 'Để trống nếu không muốn đổi mật khẩu' : 'Mật khẩu đăng nhập'}
+            label={t('users.fieldPassword')}
+            hint={editing ? t('users.fieldPasswordHint') : ''}
           >
             <input
               id="user-password"
@@ -904,20 +906,20 @@ export default function UsersPage() {
             />
           </Field>
 
-          <Field label="Hồ sơ (Profile)">
+          <Field label={t('users.fieldProfile')}>
             <CustomSelect
               id="user-profile"
               name="profile"
               value={form.profile}
               onChange={(e) => set('profile', e.target.value)}
-              placeholder="Chọn profile…"
+              placeholder={t('users.allProfiles')}
               className="w-full"
               options={profileNames.map((p) => ({ value: p, label: p }))}
             />
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Giới hạn thời gian" hint="vd: 1h, 30m, 1d">
+            <Field label={t('users.fieldUptimeLimit')} hint={t('users.fieldUptimeLimitHint')}>
               <input
                 id="user-uptime"
                 name="limit-uptime"
@@ -928,7 +930,7 @@ export default function UsersPage() {
               />
             </Field>
 
-            <Field label="Giới hạn dung lượng" hint="vd: 500M, 2G">
+            <Field label={t('users.fieldBytesLimit')} hint={t('users.fieldBytesLimitHint')}>
               <input
                 id="user-bytes"
                 name="limit-bytes-total"
@@ -940,14 +942,14 @@ export default function UsersPage() {
             </Field>
           </div>
 
-          <Field label="Ghi chú">
+          <Field label={t('users.fieldComment')}>
             <input
               id="user-comment"
               name="comment"
               className="form-input"
               value={form.comment}
               onChange={(e) => set('comment', e.target.value)}
-              placeholder="vd: Khách phòng 101"
+              placeholder={t('users.fieldCommentHint')}
             />
           </Field>
 
@@ -957,7 +959,7 @@ export default function UsersPage() {
               checked={form.disabled === 'true'}
               onChange={(e) => set('disabled', e.target.checked ? 'true' : 'false')}
             />
-            <span className="text-xs text-[var(--text-dim)]">Tạm khóa tài khoản này (disabled)</span>
+            <span className="text-xs text-[var(--text-dim)]">{t('users.fieldDisabled')}</span>
           </label>
         </form>
       </Modal>
@@ -965,15 +967,15 @@ export default function UsersPage() {
       {/* Modal Tạo/Sửa Profile */}
       <Modal
         open={profileFormOpen}
-        title={profileEditing ? `Sửa hồ sơ "${profileEditing.name}"` : 'Thêm hồ sơ gói cước mới'}
+        title={profileEditing ? t('profiles.modalEditTitle', { name: profileEditing.name }) : t('profiles.modalCreateTitle')}
         onClose={() => setProfileFormOpen(false)}
         footer={
           <>
             <button onClick={() => setProfileFormOpen(false)} className="btn btn-secondary btn-sm">
-              Hủy
+              {t('common.cancel')}
             </button>
             <button onClick={handleSubmitProfile} disabled={profileFormBusy} className="btn btn-primary btn-sm">
-              {profileFormBusy ? 'Đang lưu…' : profileEditing ? 'Cập nhật' : 'Tạo hồ sơ'}
+              {profileFormBusy ? t('common.saving') : profileEditing ? t('common.update') : t('common.create')}
             </button>
           </>
         }
@@ -985,21 +987,21 @@ export default function UsersPage() {
             </div>
           )}
 
-          <Field label="Tên hồ sơ *">
+          <Field label={t('profiles.fieldName')}>
             <input
               id="profile-name"
               name="name"
               className="form-input"
               value={profileForm.name}
               onChange={(e) => setProfileField('name', e.target.value)}
-              placeholder="vd: goi-vip-10m"
+              placeholder="vd: profile-vip"
               autoFocus
               disabled={!!profileEditing}
             />
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Tốc độ (rate-limit)" hint="vd: 10M/10M, 5M/2M">
+            <Field label={t('profiles.fieldRateLimit')} hint={t('profiles.fieldRateLimitHint')}>
               <input
                 id="profile-rate"
                 name="rate-limit"
@@ -1010,7 +1012,7 @@ export default function UsersPage() {
               />
             </Field>
 
-            <Field label="Số user dùng chung" hint="vd: 1, 5, unlimited">
+            <Field label={t('profiles.fieldSharedUsers')} hint="vd: 1, 5">
               <input
                 id="profile-shared"
                 name="shared-users"
@@ -1023,7 +1025,7 @@ export default function UsersPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Idle Timeout">
+            <Field label={t('profiles.fieldIdleTimeout')}>
               <input
                 id="profile-idle"
                 name="idle-timeout"
@@ -1034,7 +1036,7 @@ export default function UsersPage() {
               />
             </Field>
 
-            <Field label="MAC Cookie Timeout">
+            <Field label={t('profiles.fieldMacCookieTimeout')}>
               <input
                 id="profile-maccookie"
                 name="mac-cookie-timeout"
@@ -1051,64 +1053,63 @@ export default function UsersPage() {
       {/* Modal Xóa User */}
       <Modal
         open={!!deleting}
-        title="Xác nhận xóa người dùng"
+        title={t('common.delete')}
         onClose={() => setDeleting(null)}
         footer={
           <>
             <button onClick={() => setDeleting(null)} className="btn btn-secondary btn-sm">
-              Hủy
+              {t('common.cancel')}
             </button>
             <button onClick={handleDelete} className="btn btn-danger btn-sm">
-              Xác nhận xóa
+              {t('common.confirm')} {t('common.delete')}
             </button>
           </>
         }
       >
         <p className="text-xs text-[var(--text)]">
-          Bạn có chắc chắn muốn xóa tài khoản <b className="font-mono text-[var(--accent-bright)]">{deleting?.name}</b> khỏi Router MikroTik?
+          {t('users.deleteConfirm', { name: deleting?.name })}
         </p>
       </Modal>
 
       {/* Modal Xóa Profile */}
       <Modal
         open={!!deletingProfile}
-        title="Xác nhận xóa hồ sơ"
+        title={t('common.delete')}
         onClose={() => setDeletingProfile(null)}
         footer={
           <>
             <button onClick={() => setDeletingProfile(null)} className="btn btn-secondary btn-sm">
-              Hủy
+              {t('common.cancel')}
             </button>
             <button onClick={handleDeleteProfileConfirm} className="btn btn-danger btn-sm">
-              Xác nhận xóa
+              {t('common.confirm')} {t('common.delete')}
             </button>
           </>
         }
       >
         <p className="text-xs text-[var(--text)]">
-          Bạn có chắc chắn muốn xóa hồ sơ <b className="font-mono text-[var(--accent-bright)]">{deletingProfile?.name}</b>?
-          Người dùng đang gán hồ sơ này có thể bị ngắt kết nối.
+          {t('profiles.deleteConfirm', { name: deletingProfile?.name })}
         </p>
       </Modal>
 
       {/* Modal Gia Hạn Thời Gian */}
       <Modal
         open={!!extending}
-        title={`Gia hạn thời gian cho "${extending?.name}"`}
+        title={t('users.modalExtendTitle', { name: extending?.name })}
         onClose={() => setExtending(null)}
         footer={
           <>
             <button onClick={() => setExtending(null)} className="btn btn-secondary btn-sm">
-              Hủy
+              {t('common.cancel')}
             </button>
             <button onClick={handleExtend} disabled={extendBusy} className="btn btn-primary btn-sm">
-              {extendBusy ? 'Đang xử lý…' : 'Xác nhận gia hạn'}
+              {extendBusy ? t('common.saving') : t('users.saveExtend')}
             </button>
           </>
         }
       >
         <div className="space-y-3">
-          <Field label="Thời gian cộng thêm" hint="vd: 1h, 30m, 1d">
+          <Field label={t('users.extendTimeLabel')} hint="vd: 1h, 30m, 1d">
             <input
               value={extendTime}
               onChange={(e) => setExtendTime(e.target.value)}

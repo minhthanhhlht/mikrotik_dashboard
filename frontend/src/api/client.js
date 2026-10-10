@@ -111,7 +111,15 @@ export const api = {
   hosts: () => request('/hosts'),
   deleteHost: (id) =>
     request(`/hosts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  dhcpServers: () => request('/dhcp/servers'),
   dhcpLeases: () => request('/dhcp/leases'),
+  createDhcpLease: (payload) => request('/dhcp/leases', { method: 'POST', body: payload }),
+  updateDhcpLease: (id, payload) =>
+    request(`/dhcp/leases/${encodeURIComponent(id)}`, { method: 'PUT', body: payload }),
+  makeDhcpLeaseStatic: (id, payload) =>
+    request(`/dhcp/leases/${encodeURIComponent(id)}/make-static`, { method: 'POST', body: payload }),
+  makeDhcpLeaseDynamic: (id) =>
+    request(`/dhcp/leases/${encodeURIComponent(id)}/make-dynamic`, { method: 'POST' }),
   deleteDhcpLease: (id) =>
     request(`/dhcp/leases/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
@@ -143,11 +151,33 @@ export const api = {
 
   // Proxmox VE Hypervisor Performance & Guests
   proxmoxSummary: () => request('/proxmox/summary'),
+  proxmoxNodeAction: (command) => request('/proxmox/node/action', { method: 'POST', body: { command } }),
+  proxmoxNextId: () => request('/proxmox/nextid'),
+  proxmoxTemplates: () => request('/proxmox/templates'),
+  proxmoxTasks: (limit = 50) => request(`/proxmox/tasks?limit=${encodeURIComponent(limit)}`),
   proxmoxGuestAction: (type, vmid, action) =>
     request(`/proxmox/guests/${encodeURIComponent(type)}/${encodeURIComponent(vmid)}/action`, {
       method: 'POST',
       body: { action },
     }),
+
+  // Proxmox VMs (QEMU / KVM) Management
+  proxmoxVms: () => request('/proxmox/vms'),
+  proxmoxVmConfig: (vmid) => request(`/proxmox/vms/${encodeURIComponent(vmid)}/config`),
+  createProxmoxVm: (payload) => request('/proxmox/vms', { method: 'POST', body: payload }),
+  updateProxmoxVm: (vmid, payload) =>
+    request(`/proxmox/vms/${encodeURIComponent(vmid)}`, { method: 'PUT', body: payload }),
+  deleteProxmoxVm: (vmid, purge = 1) =>
+    request(`/proxmox/vms/${encodeURIComponent(vmid)}?purge=${purge ? 1 : 0}`, { method: 'DELETE' }),
+
+  // Proxmox LXC (Containers) Management
+  proxmoxLxcs: () => request('/proxmox/lxcs'),
+  proxmoxLxcConfig: (vmid) => request(`/proxmox/lxcs/${encodeURIComponent(vmid)}/config`),
+  createProxmoxLxc: (payload) => request('/proxmox/lxcs', { method: 'POST', body: payload }),
+  updateProxmoxLxc: (vmid, payload) =>
+    request(`/proxmox/lxcs/${encodeURIComponent(vmid)}`, { method: 'PUT', body: payload }),
+  deleteProxmoxLxc: (vmid, purge = 1) =>
+    request(`/proxmox/lxcs/${encodeURIComponent(vmid)}?purge=${purge ? 1 : 0}`, { method: 'DELETE' }),
 
   // Home Assistant OS (HassOS) Performance, Add-ons & Core
   hassSummary: () => request('/hass/summary'),
@@ -161,4 +191,14 @@ export const api = {
       method: 'POST',
       body: { action },
     }),
+
+  // Sổ Quản lý IP (IPAM)
+  getIpam: () => request('/ipam'),
+  createIpam: (payload) => request('/ipam', { method: 'POST', body: payload }),
+  updateIpam: (id, payload) =>
+    request(`/ipam/${encodeURIComponent(id)}`, { method: 'PUT', body: payload }),
+  deleteIpam: (id) =>
+    request(`/ipam/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  resetIpamDefault: () =>
+    request('/ipam/reset-default', { method: 'POST' }),
 };

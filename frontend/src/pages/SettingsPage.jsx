@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { useToast } from '../hooks/useToast.jsx';
+import { useLanguage } from '../context/LanguageContext.jsx';
+import { useTheme } from '../context/ThemeContext.jsx';
 import Spinner from '../components/Spinner.jsx';
 import Modal from '../components/Modal.jsx';
 import CustomSelect from '../components/CustomSelect.jsx';
@@ -17,6 +19,8 @@ const EMPTY_USER_FORM = {
 
 export default function SettingsPage() {
   const { user, group, role, fullName, isAdmin } = useAuth();
+  const { language, setLanguage, t } = useLanguage();
+  const { theme, setTheme } = useTheme();
   const toast = useToast();
   const [healthData, setHealthData] = useState(null);
   const [loadingHealth, setLoadingHealth] = useState(false);
@@ -34,6 +38,9 @@ export default function SettingsPage() {
 
   // Cấu hình Cài đặt hệ thống (Lưu tập trung JSON file trên backend)
   const [systemSettings, setSystemSettings] = useState(null);
+  const systemSettingsRef = useRef(null);
+  const lastSavedSnapshotRef = useRef('');
+
   const [voucherSettings, setVoucherSettings] = useState({    
     locationName: 'Nhà Mềnh',
     ssid: 'MT_KHACH_5G',
@@ -56,47 +63,62 @@ export default function SettingsPage() {
       const data = await api.getSettings();
       if (data) {
         setSystemSettings(data);
+        systemSettingsRef.current = data;
         if (data.voucher) {
-          setVoucherSettings((prev) => ({ ...prev, ...data.voucher }));
+          setVoucherSettings((prev) => {
+            const next = { ...prev, ...data.voucher };
+            lastSavedSnapshotRef.current = JSON.stringify(next);
+            return next;
+          });
+        } else {
+          lastSavedSnapshotRef.current = JSON.stringify(voucherSettings);
         }
         if (data.updatedAt) {
           try {
-            setLastSavedTime(new Date(data.updatedAt).toLocaleTimeString('vi-VN'));
+            setLastSavedTime(new Date(data.updatedAt).toLocaleTimeString(language === 'en' ? 'en-US' : 'vi-VN'));
           } catch {}
         }
       }
     } catch (err) {
-      console.error('Không tải được cài đặt từ máy chủ:', err.message);
+      console.error('Failed to load settings:', err.message);
     } finally {
       setHasLoadedInitial(true);
     }
-  }, []);
+  }, [language]);
 
-  // Tự động lưu cấu hình khi người dùng chỉnh sửa
+  // Tự động lưu cấu hình khi người dùng chỉnh sửa (debounce 700ms, chỉ lưu khi có thay đổi thực sự)
   useEffect(() => {
     if (!hasLoadedInitial) return;
+    const currentStr = JSON.stringify(voucherSettings);
+    // Nếu dữ liệu chưa thay đổi so với snapshot đã lưu -> không lưu lại và không nháy trạng thái
+    if (currentStr === lastSavedSnapshotRef.current) return;
+
     const timer = setTimeout(async () => {
       setSavingSettings(true);
       try {
         const payload = {
-          ...(systemSettings || {}),
+          ...(systemSettingsRef.current || {}),
           voucher: voucherSettings,
         };
         const res = await api.updateSettings(payload);
-        if (res?.settings) setSystemSettings(res.settings);
+        if (res?.settings) {
+          setSystemSettings(res.settings);
+          systemSettingsRef.current = res.settings;
+        }
+        lastSavedSnapshotRef.current = currentStr;
         try {
-          localStorage.setItem('hs_voucher_settings', JSON.stringify(voucherSettings));
+          localStorage.setItem('hs_voucher_settings', currentStr);
         } catch {}
-        setLastSavedTime(new Date().toLocaleTimeString('vi-VN'));
+        setLastSavedTime(new Date().toLocaleTimeString(language === 'en' ? 'en-US' : 'vi-VN'));
       } catch (err) {
-        console.error('Lỗi tự động lưu cài đặt:', err.message);
+        console.error('Auto-save error:', err.message);
       } finally {
         setSavingSettings(false);
       }
     }, 700);
 
     return () => clearTimeout(timer);
-  }, [voucherSettings, hasLoadedInitial]);
+  }, [voucherSettings, hasLoadedInitial, language]);
 
   async function checkHealth(manual = false) {
     setLoadingHealth(true);
@@ -105,15 +127,15 @@ export default function SettingsPage() {
       setHealthData(res);
       if (manual) {
         if (res.connected) {
-          toast.success(`Kết nối MikroTik (${res.mikrotik?.host}) ổn định · ${res.latencyMs}ms`, 'Kết nối thành công');
+          toast.success(`MikroTik (${res.mikrotik?.host}) · ${res.latencyMs}ms`, t('common.success'));
         } else {
-          toast.error(res.error || 'Không thể kết nối router MikroTik', 'Mất kết nối');
+          toast.error(res.error || t('conn.cannotConnectRest'), t('conn.disconnected'));
         }
       }
     } catch (err) {
       setHealthData({ connected: false, error: err.message });
       if (manual) {
-        toast.error(err.message, 'Lỗi kết nối router');
+        toast.error(err.message, t('common.error'));
       }
     } finally {
       setLoadingHealth(false);
@@ -165,7 +187,7 @@ export default function SettingsPage() {
       const data = await api.getRouterBackups();
       setRouterBackups(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error('Không tải được danh sách backup:', err.message);
+      console.error('Failed to load backup list:', err.message);
     } finally {
       setLoadingBackups(false);
     }
@@ -174,7 +196,7 @@ export default function SettingsPage() {
   async function handleCreateBackup(e) {
     if (e) e.preventDefault();
     if (!backupForm.name.trim()) {
-      toast.warning('Vui lòng nhập tên file sao lưu!', 'Thiếu tên file');
+      toast.warning(t('settings.backupFilenamePlaceholder'), t('common.warning'));
       return;
     }
 
@@ -185,30 +207,30 @@ export default function SettingsPage() {
         if (res.contents) {
           downloadTextFile(res.filename, res.contents);
           toast.success(
-            `Đã xuất cấu hình Router "${res.filename}" và tải về máy tính của bạn!`,
-            'Xuất script thành công'
+            `${res.filename}`,
+            t('common.success')
           );
         } else {
-          toast.success(`Đã tạo file cấu hình script "${res.filename}" trên Router.`, 'Xuất file thành công');
+          toast.success(`${res.filename}`, t('common.success'));
         }
       } else {
         try {
           await api.downloadRouterBackup(res.filename);
           toast.success(
-            `Đã tạo bản sao lưu nhị phân "${res.filename}" (${formatBytes(res.size)}) và tải về máy tính!`,
-            'Sao lưu & Tải về thành công'
+            `${res.filename} (${formatBytes(res.size)})`,
+            t('common.success')
           );
         } catch (dlErr) {
           toast.success(
-            `Đã tạo bản sao lưu "${res.filename}" trên bộ nhớ Router.`,
-            'Sao lưu hoàn tất'
+            `${res.filename}`,
+            t('common.success')
           );
         }
       }
       setBackupForm((prev) => ({ ...prev, name: generateDefaultBackupName() }));
       loadRouterBackups();
     } catch (err) {
-      toast.error('Lỗi tạo sao lưu: ' + err.message, 'Sao lưu thất bại');
+      toast.error(err.message, t('common.error'));
     } finally {
       setBackupBusy(false);
     }
@@ -216,7 +238,7 @@ export default function SettingsPage() {
 
   function handlePreviewFile(file) {
     if (!file.contents) {
-      toast.info('File nhị phân (.backup) không thể xem trước dưới dạng văn bản. Vui lòng sử dụng file script (.rsc).', 'Không thể xem trước');
+      toast.info('Binary (.backup) files cannot be previewed in plain text. Please view .rsc files.', t('common.info'));
       return;
     }
     setPreviewData({ filename: file.name, contents: file.contents });
@@ -228,27 +250,27 @@ export default function SettingsPage() {
     try {
       if (file.type === 'rsc' && file.contents) {
         downloadTextFile(file.name, file.contents);
-        toast.success(`Đã tải file script "${file.name}" về máy tính!`, 'Tải về hoàn tất');
+        toast.success(`${file.name}`, t('common.download'));
       } else {
         await api.downloadRouterBackup(file.name);
-        toast.success(`Đã tải file sao lưu "${file.name}" về máy tính!`, 'Tải về hoàn tất');
+        toast.success(`${file.name}`, t('common.download'));
       }
     } catch (err) {
-      toast.error(`Lỗi tải file "${file.name}": ${err.message}`, 'Tải về thất bại');
+      toast.error(`Error: ${err.message}`, t('common.error'));
     }
   }
 
   async function handleDeleteRouterBackup(file) {
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa bản sao lưu "${file.name}" khỏi Router?`)) {
+    if (!window.confirm(t('settings.deleteBackupConfirm', { name: file.name }))) {
       return;
     }
     setDeletingBackupId(file.id);
     try {
       await api.deleteRouterBackup(file.id);
-      toast.success(`Đã xóa bản sao lưu "${file.name}" khỏi Router.`, 'Đã xóa');
+      toast.success(file.name, t('common.delete'));
       loadRouterBackups();
     } catch (err) {
-      toast.error('Lỗi xóa file sao lưu: ' + err.message, 'Xóa thất bại');
+      toast.error(err.message, t('common.error'));
     } finally {
       setDeletingBackupId(null);
     }
@@ -260,7 +282,7 @@ export default function SettingsPage() {
       const data = await api.users();
       setHotspotUsers(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error('Không tải được danh sách hotspot users từ router:', err.message);
+      console.error('Failed to load hotspot users:', err.message);
     } finally {
       setLoadingHotspotUsers(false);
     }
@@ -276,8 +298,8 @@ export default function SettingsPage() {
     if (target) {
       const newUser = target.name || '';
       const newPass = target.password !== undefined && target.password !== null ? String(target.password) : '';
-      const uptimeStr = target['limit-uptime'] ? formatDuration(target['limit-uptime']) : 'Không giới hạn';
-      const bytesStr = target['limit-bytes-total'] ? formatBytes(target['limit-bytes-total']) : 'Không giới hạn';
+      const uptimeStr = target['limit-uptime'] ? formatDuration(target['limit-uptime'], language) : t('common.unlimited');
+      const bytesStr = target['limit-bytes-total'] ? formatBytes(target['limit-bytes-total']) : t('common.unlimited');
       setVoucherSettings((prev) => ({
         ...prev,
         sampleUser: newUser,
@@ -287,8 +309,8 @@ export default function SettingsPage() {
         sampleProfile: target.profile || '',
       }));
       toast.success(
-        `Đã chọn "${newUser}" · Pass: ${newPass ? newPass : '(Trống)'}`,
-        'Tự động điền theo User'
+        t('settings.autoFilledSuccess', { name: newUser }),
+        t('common.info')
       );
     }
   }
@@ -300,11 +322,11 @@ export default function SettingsPage() {
       const data = await api.adminUsers();
       setDashboardUsers(data || []);
     } catch (err) {
-      toast.error(`Không tải được danh sách tài khoản: ${err.message}`, 'Lỗi tải dữ liệu');
+      toast.error(err.message, t('common.error'));
     } finally {
       setLoadingUsers(false);
     }
-  }, [isAdmin, toast]);
+  }, [isAdmin, toast, t]);
 
   useEffect(() => {
     checkHealth(false);
@@ -321,19 +343,24 @@ export default function SettingsPage() {
     setSavingSettings(true);
     try {
       const payload = {
-        ...(systemSettings || {}),
+        ...(systemSettingsRef.current || systemSettings || {}),
         voucher: voucherSettings,
       };
       const res = await api.updateSettings(payload);
-      if (res?.settings) setSystemSettings(res.settings);
+      if (res?.settings) {
+        setSystemSettings(res.settings);
+        systemSettingsRef.current = res.settings;
+      }
+      const currentStr = JSON.stringify(voucherSettings);
+      lastSavedSnapshotRef.current = currentStr;
       try {
-        localStorage.setItem('hs_voucher_settings', JSON.stringify(voucherSettings));
+        localStorage.setItem('hs_voucher_settings', currentStr);
       } catch {}
-      const timeStr = new Date().toLocaleTimeString('vi-VN');
+      const timeStr = new Date().toLocaleTimeString(language === 'en' ? 'en-US' : 'vi-VN');
       setLastSavedTime(timeStr);
-      toast.success(`Đã lưu mẫu in thẻ WiFi vào máy chủ!`, 'Lưu cài đặt');
+      toast.success(t('settings.savedToServer', { time: timeStr }), t('common.save'));
     } catch (err) {
-      toast.error('Lỗi lưu cấu hình: ' + err.message, 'Lỗi lưu');
+      toast.error(err.message, t('common.error'));
     } finally {
       setSavingSettings(false);
     }
@@ -343,11 +370,11 @@ export default function SettingsPage() {
     const v = voucherSettings;
     const active = hotspotUsers.find((u) => u.name === v.sampleUser);
     const uptimeText = active?.['limit-uptime']
-      ? formatDuration(active['limit-uptime'])
-      : (v.sampleUptime || 'Không giới hạn');
+      ? formatDuration(active['limit-uptime'], language)
+      : (v.sampleUptime || t('common.unlimited'));
     const bytesText = active?.['limit-bytes-total']
       ? formatBytes(active['limit-bytes-total'])
-      : (v.sampleBytes || 'Không giới hạn');
+      : (v.sampleBytes || t('common.unlimited'));
     const profileText = active?.profile || v.sampleProfile || '';
 
     try {
@@ -355,10 +382,10 @@ export default function SettingsPage() {
         ...(systemSettings || {}),
         voucher: v,
       });
-      setLastSavedTime(new Date().toLocaleTimeString('vi-VN'));
+      setLastSavedTime(new Date().toLocaleTimeString(language === 'en' ? 'en-US' : 'vi-VN'));
     } catch {}
 
-    const html = `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>In thử thẻ WiFi - ${escapeHtml(v.locationName || 'MikroTik')}</title>
+    const html = `<!doctype html><html lang="${language}"><head><meta charset="utf-8"><title>${t('settings.printHeaderTitle', { name: escapeHtml(v.locationName || 'MikroTik') })}</title>
       <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 24px; background: #fff; color: #0f172a; }
         h2 { text-align: center; margin-bottom: 20px; font-size: 18px; font-weight: bold; color: #0f172a; }
@@ -379,19 +406,19 @@ export default function SettingsPage() {
           .card { background: #fff; border-color: #94a3b8; }
         }
       </style></head><body>
-      <h2>Mẫu In Thử Thẻ Truy Cập WiFi — ${escapeHtml(v.locationName || 'Hotspot')}</h2>
+      <h2>${t('settings.printHeaderTitle', { name: escapeHtml(v.locationName || 'Hotspot') })}</h2>
       <div class="grid">
         <div class="card">
           ${v.locationName ? `<div class="location">🏢 ${escapeHtml(v.locationName)}</div>` : ''}
-          <div class="ssid">📶 WiFi (SSID): <b>${escapeHtml(v.ssid || 'WIFI_HOTSPOT')}</b></div>
-          ${v.loginUrl ? `<div class="login-url">🌐 Đăng nhập tại: <b>${escapeHtml(v.loginUrl)}</b></div>` : ''}
+          <div class="ssid">📶 ${t('settings.wifiSsidLabel')} <b>${escapeHtml(v.ssid || 'WIFI_HOTSPOT')}</b></div>
+          ${v.loginUrl ? `<div class="login-url">🌐 ${t('settings.loginAtLabel')} <b>${escapeHtml(v.loginUrl)}</b></div>` : ''}
           <div class="divider"></div>
-          <div class="row"><span>👤 Tài khoản:</span><b class="highlight">${escapeHtml(v.sampleUser || 'khach')}</b></div>
-          <div class="row"><span>🔑 Mật khẩu:</span><b class="highlight">${escapeHtml(v.samplePassword || 'khongchiase')}</b></div>
-          <div class="row"><span>⏱️ Thời hạn:</span><b>${escapeHtml(uptimeText)}</b></div>
-          <div class="row"><span>📊 Dung lượng:</span><b>${escapeHtml(bytesText)}</b></div>
-          ${profileText ? `<div class="row"><span>📦 Gói hồ sơ:</span><b>${escapeHtml(profileText)}</b></div>` : ''}
-          ${v.hotline ? `<div class="row hotline"><span>📞 Hotline:</span><b>${escapeHtml(v.hotline)}</b></div>` : ''}
+          <div class="row"><span>👤 ${t('settings.userLabel')}</span><b class="highlight">${escapeHtml(v.sampleUser || 'khach')}</b></div>
+          <div class="row"><span>🔑 ${t('settings.passLabel')}</span><b class="highlight">${escapeHtml(v.samplePassword || 'khongchiase')}</b></div>
+          <div class="row"><span>⏱️ ${t('settings.uptimeLabel')}</span><b>${escapeHtml(uptimeText)}</b></div>
+          <div class="row"><span>📊 ${t('settings.bytesLabel')}</span><b>${escapeHtml(bytesText)}</b></div>
+          ${profileText ? `<div class="row"><span>📦 ${t('settings.profileLabel')}</span><b>${escapeHtml(profileText)}</b></div>` : ''}
+          ${v.hotline ? `<div class="row hotline"><span>📞 ${t('settings.hotlineLabel')}</span><b>${escapeHtml(v.hotline)}</b></div>` : ''}
           ${v.footerText ? `<div class="footer">${escapeHtml(v.footerText)}</div>` : ''}
         </div>
       </div>
@@ -403,7 +430,7 @@ export default function SettingsPage() {
       w.document.close();
       w.focus();
     }
-    toast.info('Đang mở cửa sổ in thử mẫu thẻ WiFi voucher', 'In thử thẻ mẫu');
+    toast.info(t('settings.printSampleBtn'), t('common.info'));
   }
 
   function escapeHtml(s) {
@@ -435,11 +462,11 @@ export default function SettingsPage() {
   async function handleSaveUser(e) {
     e.preventDefault();
     if (!userForm.username.trim()) {
-      setUserFormError('Vui lòng nhập tên tài khoản.');
+      setUserFormError(t('settings.fieldAccountName'));
       return;
     }
     if (!editingUser && !userForm.password) {
-      setUserFormError('Vui lòng nhập mật khẩu cho tài khoản mới.');
+      setUserFormError(t('settings.fieldAccountPass'));
       return;
     }
 
@@ -453,7 +480,7 @@ export default function SettingsPage() {
         };
         if (userForm.password) payload.password = userForm.password;
         await api.updateAdminUser(editingUser.id, payload);
-        toast.success(`Đã cập nhật tài khoản "${editingUser.username}" trên MikroTik.`, 'Cập nhật thành công');
+        toast.success(`"${editingUser.username}"`, t('common.update'));
       } else {
         await api.createAdminUser({
           username: userForm.username.trim(),
@@ -461,13 +488,13 @@ export default function SettingsPage() {
           group: userForm.group,
           fullName: userForm.fullName.trim(),
         });
-        toast.success(`Đã tạo tài khoản "${userForm.username}" trên MikroTik RouterOS.`, 'Tạo thành công');
+        toast.success(`"${userForm.username}"`, t('common.create'));
       }
       setUserModalOpen(false);
       loadDashboardUsers();
     } catch (err) {
       setUserFormError(err.message);
-      toast.error(err.message, 'Lỗi thao tác tài khoản');
+      toast.error(err.message, t('common.error'));
     } finally {
       setUserFormBusy(false);
     }
@@ -475,39 +502,39 @@ export default function SettingsPage() {
 
   async function handleDeleteUser(u) {
     if (u.group === 'full' || u.role === 'admin') {
-      toast.warning('Tài khoản thuộc nhóm quyền cao nhất (full) được bảo vệ và không thể xóa!', 'Không thể xóa');
+      toast.warning('Admin full group account is protected!', t('common.warning'));
       return;
     }
     if (u.username === user) {
-      toast.warning('Không thể tự xóa tài khoản của chính bạn!', 'Thao tác bị chặn');
+      toast.warning('Cannot delete your own current account!', t('common.warning'));
       return;
     }
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa tài khoản "${u.username}" (${u.fullName})?`)) {
+    if (!window.confirm(t('settings.deleteAccountConfirm', { name: u.username }))) {
       return;
     }
     setBusyUserId(u.id);
     try {
       await api.deleteAdminUser(u.id);
-      toast.success(`Đã xóa tài khoản "${u.username}" khỏi MikroTik.`, 'Xóa thành công');
+      toast.success(u.username, t('common.delete'));
       loadDashboardUsers();
     } catch (err) {
-      toast.error('Lỗi xóa tài khoản: ' + err.message, 'Xóa thất bại');
+      toast.error(err.message, t('common.error'));
     } finally {
       setBusyUserId(null);
     }
   }
 
-  const routerCliScript = `# Cấu hình dịch vụ REST API trên MikroTik RouterOS 7
+  const routerCliScript = `# MikroTik RouterOS 7 REST API Setup
 /ip/service set www disabled=no port=80
 /ip/service set www-ssl disabled=no port=443
 
-# Tạo user quản trị riêng cho Dashboard
-/user add name=user_api group=full password="<MAT_KHAU_MANH>" comment="Hotspot Dashboard API"`;
+# Create dedicated admin account for Dashboard
+/user add name=user_api group=full password="<STRONG_PASSWORD>" comment="Hotspot Dashboard API"`;
 
   function copyCliScript() {
     navigator.clipboard.writeText(routerCliScript);
     setCopiedScript(true);
-    toast.info('Đã sao chép lệnh CLI WinBox vào bộ nhớ tạm!', 'Đã sao chép');
+    toast.info(t('settings.copiedCliBtn'), t('common.copied'));
     setTimeout(() => setCopiedScript(false), 3000);
   }
 
@@ -515,11 +542,11 @@ export default function SettingsPage() {
     (u) => u.name === voucherSettings.sampleUser || (selectedHotspotUser && u.name === selectedHotspotUser)
   );
   const userUptimeDisplay = activeUser?.['limit-uptime']
-    ? formatDuration(activeUser['limit-uptime'])
-    : (voucherSettings.sampleUptime || 'Không giới hạn');
+    ? formatDuration(activeUser['limit-uptime'], language)
+    : (voucherSettings.sampleUptime || t('common.unlimited'));
   const userBytesDisplay = activeUser?.['limit-bytes-total']
     ? formatBytes(activeUser['limit-bytes-total'])
-    : (voucherSettings.sampleBytes || 'Không giới hạn');
+    : (voucherSettings.sampleBytes || t('common.unlimited'));
   const userProfileDisplay = activeUser?.profile || voucherSettings.sampleProfile || '';
 
   return (
@@ -527,9 +554,9 @@ export default function SettingsPage() {
       {/* Header */}
       <div className="sk-topbar flex-wrap">
         <div>
-          <h1 className="sk-title">Cài đặt hệ thống</h1>
+          <h1 className="sk-title">{t('settings.title')}</h1>
           <p className="sk-subtitle font-mono">
-            Cấu hình kết nối Router, mẫu in thẻ WiFi voucher & Quản lý phân quyền tài khoản
+            {t('settings.subtitle')}
           </p>
         </div>
         <button
@@ -537,40 +564,148 @@ export default function SettingsPage() {
           disabled={loadingHealth}
           className="btn btn-secondary btn-sm"
         >
-          {loadingHealth ? <Spinner size="xs" /> : '⚡'} Kiểm tra kết nối router
+          {loadingHealth ? <Spinner size="xs" /> : '⚡'} {t('common.refresh')}
         </button>
       </div>
+
+      {/* 0. Cấu hình Ngôn ngữ & Giao diện (Language & Appearance) */}
+      <section className="sk-card">
+        <div className="mb-4 border-b border-[var(--border-soft)] pb-3">
+          <h2 className="text-base font-bold text-[var(--text)]">{t('settings.langAndThemeTitle')}</h2>
+          <p className="font-mono text-xs text-[var(--text-faint)] mt-0.5">
+            {t('settings.langAndThemeDesc')}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Ngôn ngữ hiển thị */}
+          <div className="space-y-2">
+            <label className="form-label">{t('settings.selectLanguage')}</label>
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => setLanguage('vi')}
+                className={`flex items-center justify-between p-3 rounded-[var(--radius-sm)] border transition-all ${
+                  language === 'vi'
+                    ? 'border-[var(--accent)] bg-[var(--accent-bg)] shadow-[0_0_12px_var(--accent-glow)]'
+                    : 'border-[var(--border)] bg-[var(--surface-2)] hover:bg-[var(--surface-hover)]'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="text-lg">🇻🇳</span>
+                  <div className="text-left">
+                    <div className={`text-xs font-semibold ${language === 'vi' ? 'text-[var(--accent-bright)]' : 'text-[var(--text)]'}`}>
+                      Tiếng Việt
+                    </div>
+                    <div className="text-[10px] font-mono text-[var(--text-faint)]">{t('settings.langViDesc')}</div>
+                  </div>
+                </div>
+                {language === 'vi' && <span className="text-[var(--accent-bright)] text-xs font-bold">✓</span>}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setLanguage('en')}
+                className={`flex items-center justify-between p-3 rounded-[var(--radius-sm)] border transition-all ${
+                  language === 'en'
+                    ? 'border-[var(--accent)] bg-[var(--accent-bg)] shadow-[0_0_12px_var(--accent-glow)]'
+                    : 'border-[var(--border)] bg-[var(--surface-2)] hover:bg-[var(--surface-hover)]'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="text-lg">🇬🇧</span>
+                  <div className="text-left">
+                    <div className={`text-xs font-semibold ${language === 'en' ? 'text-[var(--accent-bright)]' : 'text-[var(--text)]'}`}>
+                      English
+                    </div>
+                    <div className="text-[10px] font-mono text-[var(--text-faint)]">{t('settings.langEnDesc')}</div>
+                  </div>
+                </div>
+                {language === 'en' && <span className="text-[var(--accent-bright)] text-xs font-bold">✓</span>}
+              </button>
+            </div>
+          </div>
+
+          {/* Chủ đề giao diện */}
+          <div className="space-y-2">
+            <label className="form-label">{t('settings.selectTheme')}</label>
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => setTheme('dark')}
+                className={`flex items-center justify-between p-3 rounded-[var(--radius-sm)] border transition-all ${
+                  theme === 'dark'
+                    ? 'border-[var(--accent)] bg-[var(--accent-bg)] shadow-[0_0_12px_var(--accent-glow)]'
+                    : 'border-[var(--border)] bg-[var(--surface-2)] hover:bg-[var(--surface-hover)]'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="text-base">🌙</span>
+                  <div className="text-left">
+                    <div className={`text-xs font-semibold ${theme === 'dark' ? 'text-[var(--accent-bright)]' : 'text-[var(--text)]'}`}>
+                      Dark Theme
+                    </div>
+                    <div className="text-[10px] font-mono text-[var(--text-faint)]">{t('settings.themeDarkDesc')}</div>
+                  </div>
+                </div>
+                {theme === 'dark' && <span className="text-[var(--accent-bright)] text-xs font-bold">✓</span>}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTheme('light')}
+                className={`flex items-center justify-between p-3 rounded-[var(--radius-sm)] border transition-all ${
+                  theme === 'light'
+                    ? 'border-[var(--accent)] bg-[var(--accent-bg)] shadow-[0_0_12px_var(--accent-glow)]'
+                    : 'border-[var(--border)] bg-[var(--surface-2)] hover:bg-[var(--surface-hover)]'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="text-base">☀️</span>
+                  <div className="text-left">
+                    <div className={`text-xs font-semibold ${theme === 'light' ? 'text-[var(--accent-bright)]' : 'text-[var(--text)]'}`}>
+                      Light Theme
+                    </div>
+                    <div className="text-[10px] font-mono text-[var(--text-faint)]">{t('settings.themeLightDesc')}</div>
+                  </div>
+                </div>
+                {theme === 'light' && <span className="text-[var(--accent-bright)] text-xs font-bold">✓</span>}
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* 1. Quản lý tài khoản MikroTik System Users (/user) */}
       {isAdmin && (
         <section className="sk-card">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-soft)] pb-3">
             <div>
-              <h2 className="text-base font-bold text-[var(--text)]">Tài khoản Hệ thống MikroTik (/user)</h2>
+              <h2 className="text-base font-bold text-[var(--text)]">{t('settings.systemAccountsTitle')}</h2>
               <p className="font-mono text-xs text-[var(--text-faint)]">
-                Đồng bộ RouterOS 7 · Nhóm quyền: <b>full</b> (Admin), <b>write</b> (Operator), <b>read</b> (Viewer)
+                {t('settings.systemAccountsDesc')}
               </p>
             </div>
             <button
               onClick={openCreateUserModal}
               className="btn btn-primary btn-sm"
             >
-              + Thêm tài khoản
+              {t('settings.addAccountBtn')}
             </button>
           </div>
 
           {loadingUsers ? (
-            <Spinner label="Đang tải danh sách tài khoản từ MikroTik…" />
+            <Spinner label={t('common.loading')} />
           ) : (
             <div className="overflow-x-auto">
               <table className="sk-dtable">
                 <thead>
                   <tr>
-                    <th>Tài khoản</th>
-                    <th>Ghi chú / Họ tên</th>
-                    <th>Nhóm MikroTik</th>
-                    <th>Quyền Console</th>
-                    <th className="text-right">Thao tác</th>
+                    <th>{t('settings.colAccount')}</th>
+                    <th>{t('settings.colFullname')}</th>
+                    <th>{t('settings.colMtikGroup')}</th>
+                    <th>{t('settings.colConsoleRole')}</th>
+                    <th className="text-right">{t('common.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -579,7 +714,7 @@ export default function SettingsPage() {
                       <td className="font-mono font-bold">
                         {u.username}
                         {u.username === user && (
-                          <span className="sk-state sk-state--accent ml-2 text-[9px]">BẠN</span>
+                          <span className="sk-state sk-state--accent ml-2 text-[9px]">{t('common.you')}</span>
                         )}
                       </td>
                       <td className="text-[var(--text-dim)]">{u.fullName || '—'}</td>
@@ -600,10 +735,10 @@ export default function SettingsPage() {
                         >
                           <span className="sk-pill__dot" />
                           {u.group === 'full' || u.role === 'admin'
-                            ? 'ADMIN (FULL)'
+                            ? t('auth.roleAdmin')
                             : u.group === 'write' || u.role === 'operator'
-                            ? 'OPERATOR (WRITE)'
-                            : 'VIEWER (READ)'}
+                            ? t('auth.roleOperator')
+                            : t('auth.roleViewer')}
                         </span>
                       </td>
                       <td className="text-right">
@@ -612,7 +747,7 @@ export default function SettingsPage() {
                             onClick={() => openEditUserModal(u)}
                             className="btn btn-secondary btn-sm h-7 px-2 text-[11px]"
                           >
-                            Sửa
+                            {t('common.edit')}
                           </button>
                           {u.username !== user && u.group !== 'full' && (
                             <button
@@ -620,7 +755,7 @@ export default function SettingsPage() {
                               disabled={busyUserId === u.id}
                               className="btn btn-ghost btn-sm h-7 px-2 text-[11px] text-[var(--red)] hover:bg-[var(--red-bg)]"
                             >
-                              {busyUserId === u.id ? '…' : 'Xóa'}
+                              {busyUserId === u.id ? '…' : t('common.delete')}
                             </button>
                           )}
                         </div>
@@ -638,9 +773,9 @@ export default function SettingsPage() {
       <section className="sk-card">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-soft)] pb-3">
           <div>
-            <h2 className="text-base font-bold text-[var(--text)]">Mẫu in thẻ WiFi Voucher & Tài khoản</h2>
+            <h2 className="text-base font-bold text-[var(--text)]">{t('settings.voucherTitle')}</h2>
             <p className="font-mono text-xs text-[var(--text-faint)]">
-              Tùy biến mẫu in phiếu truy cập cho khách hàng
+              {t('settings.voucherDesc')}
             </p>
           </div>
           <button
@@ -648,7 +783,7 @@ export default function SettingsPage() {
             onClick={printSampleCard}
             className="btn btn-secondary btn-sm"
           >
-            🖨️ In thử thẻ mẫu
+            {t('settings.printSampleBtn')}
           </button>
         </div>
 
@@ -656,19 +791,19 @@ export default function SettingsPage() {
           {/* Form cấu hình */}
           <form onSubmit={handleSaveVoucherSettings} className="space-y-4 lg:col-span-7">
             <div className="flex items-center justify-between rounded-[var(--radius-sm)] bg-[var(--surface-2)] px-3 py-2 text-xs font-mono">
-              <span className="text-[var(--text-dim)]">📁 Trạng thái lưu:</span>
+              <span className="text-[var(--text-dim)]">📁 {t('settings.saveStatus')}</span>
               {savingSettings ? (
-                <span className="text-[var(--amber)] font-semibold">Đang lưu vào settings.json…</span>
+                <span className="text-[var(--amber)] font-semibold">{t('settings.savingToJson')}</span>
               ) : lastSavedTime ? (
-                <span className="text-[var(--green)] font-semibold">Đã lưu máy chủ ({lastSavedTime})</span>
+                <span className="text-[var(--green)] font-semibold">{t('settings.savedToServer', { time: lastSavedTime })}</span>
               ) : (
-                <span className="text-[var(--text-faint)]">Sẵn sàng</span>
+                <span className="text-[var(--text-faint)]">{t('settings.readyStatus')}</span>
               )}
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <label className="form-label">Tên địa điểm / Cơ sở</label>
+                <label className="form-label">{t('settings.locationName')}</label>
                 <input
                   id="voucher-location-name"
                   name="locationName"
@@ -677,12 +812,12 @@ export default function SettingsPage() {
                   onChange={(e) =>
                     setVoucherSettings({ ...voucherSettings, locationName: e.target.value })
                   }
-                  placeholder="VD: Quán Cafe / Khách Sạn ABC"
+                  placeholder={t('settings.locationPlaceholder')}
                 />
               </div>
 
               <div>
-                <label className="form-label">Tên sóng WiFi (SSID)</label>
+                <label className="form-label">{t('settings.ssid')}</label>
                 <input
                   id="voucher-ssid"
                   name="ssid"
@@ -691,7 +826,7 @@ export default function SettingsPage() {
                   onChange={(e) =>
                     setVoucherSettings({ ...voucherSettings, ssid: e.target.value })
                   }
-                  placeholder="VD: WIFI_HOTSPOT"
+                  placeholder={t('settings.ssidPlaceholder')}
                 />
               </div>
             </div>
@@ -700,7 +835,7 @@ export default function SettingsPage() {
             <div className="rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-2)] p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="form-label mb-0 text-[10px] text-[var(--accent-bright)]">
-                  ⚡ Chọn tài khoản Hotspot từ Router (Tự động điền)
+                  {t('settings.selectUserFromRouter')}
                 </span>
                 <button
                   type="button"
@@ -708,21 +843,21 @@ export default function SettingsPage() {
                   disabled={loadingHotspotUsers}
                   className="btn btn-ghost btn-sm h-6 px-1.5 text-[10px]"
                 >
-                  {loadingHotspotUsers ? <Spinner size="xs" /> : '⟳'} Tải lại
+                  {loadingHotspotUsers ? <Spinner size="xs" /> : '⟳'} {t('settings.reloadBtn')}
                 </button>
               </div>
 
               <CustomSelect
                 id="select-hotspot-user"
-                aria-label="Chọn tài khoản Hotspot từ Router"
+                aria-label={t('settings.selectUserFromRouter')}
                 className="w-full"
                 buttonClassName="font-mono text-xs h-8"
                 placeholder={
                   loadingHotspotUsers
-                    ? 'Đang tải danh sách tài khoản…'
+                    ? t('settings.loadingUserList')
                     : hotspotUsers.length === 0
-                    ? '-- Không có tài khoản nào trên Router --'
-                    : `-- Chọn tài khoản từ danh sách Router (${hotspotUsers.length}) --`
+                    ? t('settings.noUsersOnRouter')
+                    : t('settings.selectUserCount', { count: hotspotUsers.length })
                 }
                 searchable={hotspotUsers.length > 4}
                 value={
@@ -732,7 +867,7 @@ export default function SettingsPage() {
                 onChange={handleSelectHotspotUser}
                 options={hotspotUsers.map((u) => ({
                   value: u.name,
-                  label: `${u.name} (Pass: ${u.password ? u.password : 'trống'})`,
+                  label: `${u.name} (Pass: ${u.password ? u.password : t('common.empty')})`,
                   badge: u.profile || 'default',
                 }))}
               />
@@ -740,7 +875,7 @@ export default function SettingsPage() {
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <label className="form-label">Cổng đăng nhập (Login URL)</label>
+                <label className="form-label">{t('settings.loginUrl')}</label>
                 <input
                   id="voucher-login-url"
                   name="loginUrl"
@@ -749,12 +884,12 @@ export default function SettingsPage() {
                   onChange={(e) =>
                     setVoucherSettings({ ...voucherSettings, loginUrl: e.target.value })
                   }
-                  placeholder="VD: http://192.168.88.1"
+                  placeholder={t('settings.loginUrlPlaceholder')}
                 />
               </div>
 
               <div>
-                <label className="form-label">Số Hotline hỗ trợ</label>
+                <label className="form-label">{t('settings.hotline')}</label>
                 <input
                   id="voucher-hotline"
                   name="hotline"
@@ -763,13 +898,13 @@ export default function SettingsPage() {
                   onChange={(e) =>
                     setVoucherSettings({ ...voucherSettings, hotline: e.target.value })
                   }
-                  placeholder="VD: 0888 123 456"
+                  placeholder={t('settings.hotlinePlaceholder')}
                 />
               </div>
             </div>
 
             <div>
-              <label className="form-label">Dòng chữ chân trang (Footer)</label>
+              <label className="form-label">{t('settings.footerText')}</label>
               <input
                 id="voucher-footer"
                 name="footerText"
@@ -778,7 +913,7 @@ export default function SettingsPage() {
                 onChange={(e) =>
                   setVoucherSettings({ ...voucherSettings, footerText: e.target.value })
                 }
-                placeholder="VD: Chúc quý khách truy cập mạng vui vẻ!"
+                placeholder={t('settings.footerPlaceholder')}
               />
             </div>
 
@@ -788,14 +923,14 @@ export default function SettingsPage() {
                 disabled={savingSettings}
                 className="btn btn-primary btn-sm"
               >
-                {savingSettings ? 'Đang lưu…' : 'Lưu cấu hình ngay'}
+                {savingSettings ? t('common.saving') : t('settings.saveConfigNow')}
               </button>
               <button
                 type="button"
                 onClick={printSampleCard}
                 className="btn btn-secondary btn-sm"
               >
-                In thử 1 thẻ
+                {t('settings.printOneCard')}
               </button>
             </div>
           </form>
@@ -803,7 +938,7 @@ export default function SettingsPage() {
           {/* Live Preview Card */}
           <div className="lg:col-span-5 flex flex-col items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border-soft)] bg-[var(--surface-2)] p-5">
             <div className="text-[11px] font-mono text-[var(--text-faint)] uppercase tracking-wider mb-3">
-              Xem trước mẫu in (Preview)
+              {t('settings.previewCard')}
             </div>
 
             <div className="w-full max-w-[280px] rounded-[var(--radius-sm)] border border-dashed border-[var(--accent)] bg-[var(--surface)] p-4 shadow-sm font-sans space-y-2 text-xs">
@@ -813,7 +948,7 @@ export default function SettingsPage() {
                 </div>
               )}
               <div className="font-semibold text-[var(--text)]">
-                📶 WiFi: <b>{voucherSettings.ssid || 'WIFI_HOTSPOT'}</b>
+                📶 {t('settings.wifiSsidLabel')} <b>{voucherSettings.ssid || 'WIFI_HOTSPOT'}</b>
               </div>
               {voucherSettings.loginUrl && (
                 <div className="font-mono text-[10px] text-[var(--cyan)]">
@@ -822,34 +957,34 @@ export default function SettingsPage() {
               )}
               <div className="border-t border-[var(--border-soft)] my-1.5" />
               <div className="flex justify-between font-mono">
-                <span className="text-[var(--text-faint)]">👤 Tài khoản:</span>
+                <span className="text-[var(--text-faint)]">👤 {t('settings.userLabel')}</span>
                 <span className="font-bold text-[var(--text)] bg-[var(--surface-2)] px-1 rounded">
                   {voucherSettings.sampleUser || 'khach'}
                 </span>
               </div>
               <div className="flex justify-between font-mono">
-                <span className="text-[var(--text-faint)]">🔑 Mật khẩu:</span>
+                <span className="text-[var(--text-faint)]">🔑 {t('settings.passLabel')}</span>
                 <span className="font-bold text-[var(--text)] bg-[var(--surface-2)] px-1 rounded">
                   {voucherSettings.samplePassword || 'khongchiase'}
                 </span>
               </div>
               <div className="flex justify-between font-mono text-[11px]">
-                <span className="text-[var(--text-faint)]">⏱️ Thời hạn:</span>
+                <span className="text-[var(--text-faint)]">⏱️ {t('settings.uptimeLabel')}</span>
                 <span>{userUptimeDisplay}</span>
               </div>
               <div className="flex justify-between font-mono text-[11px]">
-                <span className="text-[var(--text-faint)]">📊 Dung lượng:</span>
+                <span className="text-[var(--text-faint)]">📊 {t('settings.bytesLabel')}</span>
                 <span>{userBytesDisplay}</span>
               </div>
               {userProfileDisplay && (
                 <div className="flex justify-between font-mono text-[11px]">
-                  <span className="text-[var(--text-faint)]">📦 Gói hồ sơ:</span>
+                  <span className="text-[var(--text-faint)]">📦 {t('settings.profileLabel')}</span>
                   <span>{userProfileDisplay}</span>
                 </div>
               )}
               {voucherSettings.hotline && (
                 <div className="font-mono text-[10px] text-[var(--accent-bright)] mt-1">
-                  📞 Hotline: {voucherSettings.hotline}
+                  📞 {t('settings.hotlineLabel')} {voucherSettings.hotline}
                 </div>
               )}
               {voucherSettings.footerText && (
@@ -866,9 +1001,9 @@ export default function SettingsPage() {
       <section className="sk-card">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-soft)] pb-3">
           <div>
-            <h2 className="text-base font-bold text-[var(--text)]">Sao lưu & Xuất cấu hình RouterOS (.backup / .rsc)</h2>
+            <h2 className="text-base font-bold text-[var(--text)]">{t('settings.backupTitle')}</h2>
             <p className="font-mono text-xs text-[var(--text-faint)]">
-              Tạo và tải về file cấu hình script RouterOS dạng văn bản (.rsc) hoặc file nhị phân (.backup)
+              {t('settings.backupDesc')}
             </p>
           </div>
           <button
@@ -876,7 +1011,7 @@ export default function SettingsPage() {
             disabled={loadingBackups}
             className="btn btn-secondary btn-sm"
           >
-            {loadingBackups ? <Spinner size="xs" /> : '⟳'} Làm mới danh sách
+            {loadingBackups ? <Spinner size="xs" /> : '⟳'} {t('settings.refreshBackupList')}
           </button>
         </div>
 
@@ -884,31 +1019,31 @@ export default function SettingsPage() {
         <form onSubmit={handleCreateBackup} className="rounded-[var(--radius-sm)] border border-[var(--border-soft)] bg-[var(--surface-2)] p-4 space-y-3 mb-5">
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex-1 min-w-[200px]">
-              <label className="form-label">Tên file sao lưu</label>
+              <label className="form-label">{t('settings.backupFilename')}</label>
               <input
                 value={backupForm.name}
                 onChange={(e) => setBackupForm({ ...backupForm, name: e.target.value })}
                 className="form-input text-xs"
-                placeholder="vd: mikrotik_backup_2026"
+                placeholder={t('settings.backupFilenamePlaceholder')}
               />
             </div>
 
             <div className="w-48">
-              <label className="form-label">Định dạng xuất</label>
+              <label className="form-label">{t('settings.exportFormat')}</label>
               <div className="sk-seg w-full">
                 <button
                   type="button"
                   onClick={() => setBackupForm({ ...backupForm, type: 'rsc' })}
                   className={`sk-seg__btn flex-1 justify-center ${backupForm.type === 'rsc' ? 'is-on' : ''}`}
                 >
-                  Script (.rsc)
+                  {t('settings.backupTypeRsc')}
                 </button>
                 <button
                   type="button"
                   onClick={() => setBackupForm({ ...backupForm, type: 'backup' })}
                   className={`sk-seg__btn flex-1 justify-center ${backupForm.type === 'backup' ? 'is-on' : ''}`}
                 >
-                  Binary (.backup)
+                  {t('settings.backupTypeBin')}
                 </button>
               </div>
             </div>
@@ -919,7 +1054,7 @@ export default function SettingsPage() {
                 disabled={backupBusy}
                 className="btn btn-primary btn-sm h-9"
               >
-                {backupBusy ? 'Đang xuất…' : backupForm.type === 'rsc' ? '⬇ Xuất file .rsc' : '⬇ Tạo file .backup'}
+                {backupBusy ? t('settings.exportingBtn') : backupForm.type === 'rsc' ? t('settings.exportRscBtn') : t('settings.createBackupFileBtn')}
               </button>
             </div>
           </div>
@@ -933,7 +1068,7 @@ export default function SettingsPage() {
                     checked={backupForm.showSensitive}
                     onChange={(e) => setBackupForm({ ...backupForm, showSensitive: e.target.checked })}
                   />
-                  <span>Bao gồm mật khẩu / thông tin nhạy cảm (show-sensitive)</span>
+                  <span>{t('settings.showSensitiveOption')}</span>
                 </label>
                 <label className="flex items-center gap-1.5 cursor-pointer">
                   <input
@@ -941,7 +1076,7 @@ export default function SettingsPage() {
                     checked={backupForm.compact}
                     onChange={(e) => setBackupForm({ ...backupForm, compact: e.target.checked })}
                   />
-                  <span>Nén gọn chỉ cấu hình tùy chỉnh (compact)</span>
+                  <span>{t('settings.compactOption')}</span>
                 </label>
               </>
             ) : (
@@ -951,7 +1086,7 @@ export default function SettingsPage() {
                   checked={backupForm.dontEncrypt}
                   onChange={(e) => setBackupForm({ ...backupForm, dontEncrypt: e.target.checked })}
                 />
-                <span>Không mã hóa file nhị phân (dont-encrypt)</span>
+                <span>{t('settings.dontEncryptOption')}</span>
               </label>
             )}
           </div>
@@ -962,18 +1097,18 @@ export default function SettingsPage() {
           <table className="sk-dtable">
             <thead>
               <tr>
-                <th>Tên file trên Router</th>
-                <th>Loại file</th>
-                <th>Dung lượng</th>
-                <th>Thời gian tạo</th>
-                <th className="text-right">Thao tác</th>
+                <th>{t('settings.colBackupName')}</th>
+                <th>{t('settings.colBackupType')}</th>
+                <th>{t('settings.colBackupSize')}</th>
+                <th>{t('settings.colBackupDate')}</th>
+                <th className="text-right">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
               {routerBackups.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-8 text-center font-mono text-xs text-[var(--text-faint)]">
-                    Chưa có file sao lưu nào trên Router. Hãy nhấn nút xuất file ở trên.
+                    {t('settings.noBackups')}
                   </td>
                 </tr>
               ) : (
@@ -995,7 +1130,7 @@ export default function SettingsPage() {
                             onClick={() => handlePreviewFile(file)}
                             className="btn btn-secondary btn-sm h-7 px-2 text-[11px]"
                           >
-                            👁 Xem script
+                            {t('settings.previewScriptBtn')}
                           </button>
                         )}
                         <button
@@ -1003,7 +1138,7 @@ export default function SettingsPage() {
                           onClick={() => handleDownloadExistingFile(file)}
                           className="btn btn-primary btn-sm h-7 px-2 text-[11px]"
                         >
-                          ⬇ Tải về
+                          {t('settings.downloadBtn')}
                         </button>
                         <button
                           type="button"
@@ -1011,7 +1146,7 @@ export default function SettingsPage() {
                           disabled={deletingBackupId === file.id}
                           className="btn btn-ghost btn-sm h-7 px-2 text-[11px] text-[var(--red)] hover:bg-[var(--red-bg)]"
                         >
-                          {deletingBackupId === file.id ? '…' : 'Xóa'}
+                          {deletingBackupId === file.id ? '…' : t('common.delete')}
                         </button>
                       </div>
                     </td>
@@ -1027,16 +1162,16 @@ export default function SettingsPage() {
       <section className="sk-card">
         <div className="mb-3 flex items-center justify-between border-b border-[var(--border-soft)] pb-3">
           <div>
-            <h2 className="text-sm font-bold text-[var(--text)]">Lệnh Cấu hình RouterOS REST API (Terminal CLI)</h2>
+            <h2 className="text-sm font-bold text-[var(--text)]">{t('settings.cliTitle')}</h2>
             <p className="font-mono text-xs text-[var(--text-faint)]">
-              Chạy các lệnh sau trong WinBox New Terminal nếu router chưa bật REST
+              {t('settings.cliSubtitle')}
             </p>
           </div>
           <button
             onClick={copyCliScript}
             className="btn btn-secondary btn-sm font-mono text-xs"
           >
-            {copiedScript ? '✓ Đã sao chép' : '📋 Sao chép lệnh CLI'}
+            {copiedScript ? t('settings.copiedCliBtn') : t('settings.copyCliBtn')}
           </button>
         </div>
 
@@ -1048,15 +1183,15 @@ export default function SettingsPage() {
       {/* Modal Quản lý User */}
       <Modal
         open={userModalOpen}
-        title={editingUser ? `Sửa tài khoản "${editingUser.username}"` : 'Tạo tài khoản MikroTik mới'}
+        title={editingUser ? t('settings.modalEditAccount', { name: editingUser.username }) : t('settings.modalCreateAccount')}
         onClose={() => setUserModalOpen(false)}
         footer={
           <>
             <button onClick={() => setUserModalOpen(false)} className="btn btn-secondary btn-sm">
-              Hủy
+              {t('common.cancel')}
             </button>
             <button onClick={handleSaveUser} disabled={userFormBusy} className="btn btn-primary btn-sm">
-              {userFormBusy ? 'Đang lưu…' : editingUser ? 'Cập nhật' : 'Tạo tài khoản'}
+              {userFormBusy ? t('common.saving') : editingUser ? t('common.update') : t('common.create')}
             </button>
           </>
         }
@@ -1069,7 +1204,7 @@ export default function SettingsPage() {
           )}
 
           <div>
-            <label className="form-label">Tên tài khoản *</label>
+            <label className="form-label">{t('settings.fieldAccountName')}</label>
             <input
               className="form-input"
               value={userForm.username}
@@ -1082,7 +1217,7 @@ export default function SettingsPage() {
 
           <div>
             <label className="form-label">
-              Mật khẩu {editingUser ? '(để trống nếu không muốn đổi)' : '*'}
+              {t('settings.fieldAccountPass')} {editingUser ? t('settings.fieldAccountPassHint') : '*'}
             </label>
             <input
               type="password"
@@ -1094,25 +1229,25 @@ export default function SettingsPage() {
           </div>
 
           <div>
-            <label className="form-label">Họ và tên / Ghi chú</label>
+            <label className="form-label">{t('settings.colFullname')}</label>
             <input
               className="form-input"
               value={userForm.fullName}
               onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })}
-              placeholder="vd: Nguyễn Văn A (Nhân viên lễ tân)"
+              placeholder="vd: Operator / Reception"
             />
           </div>
 
           <div>
-            <label className="form-label">Nhóm quyền RouterOS (Group)</label>
+            <label className="form-label">{t('settings.fieldAccountGroup')}</label>
             <CustomSelect
               className="w-full"
               value={userForm.group}
               onChange={(e) => setUserForm({ ...userForm, group: e.target.value })}
               options={[
-                { value: 'write', label: 'write — Nhân viên vận hành (Cấp phát, gia hạn voucher)' },
-                { value: 'full', label: 'full — Quản trị viên cao cấp (Toàn quyền hệ thống)' },
-                { value: 'read', label: 'read — Giám sát viên (Chỉ xem thống kê)' },
+                { value: 'write', label: t('settings.groupWriteOption') },
+                { value: 'full', label: t('settings.groupFullOption') },
+                { value: 'read', label: t('settings.groupReadOption') },
               ]}
             />
           </div>
@@ -1122,7 +1257,7 @@ export default function SettingsPage() {
       {/* Modal Xem trước Script .rsc */}
       <Modal
         open={previewModalOpen}
-        title={`Xem cấu hình Script: ${previewData.filename}`}
+        title={t('settings.modalPreviewTitle', { name: previewData.filename })}
         maxWidth="max-w-3xl"
         onClose={() => setPreviewModalOpen(false)}
         footer={
@@ -1131,18 +1266,18 @@ export default function SettingsPage() {
               onClick={() => {
                 navigator.clipboard.writeText(previewData.contents);
                 setCopiedPreview(true);
-                toast.info('Đã sao chép toàn bộ script vào bộ nhớ tạm!', 'Đã sao chép');
+                toast.info(t('settings.copiedScript'), t('common.copied'));
                 setTimeout(() => setCopiedPreview(false), 3000);
               }}
               className="btn btn-secondary btn-sm"
             >
-              {copiedPreview ? '✓ Đã sao chép' : '📋 Sao chép Script'}
+              {copiedPreview ? t('settings.copiedScript') : t('settings.copyScript')}
             </button>
             <button
               onClick={() => downloadTextFile(previewData.filename, previewData.contents)}
               className="btn btn-primary btn-sm"
             >
-              ⬇ Tải file về
+              {t('settings.downloadScriptFile')}
             </button>
           </>
         }

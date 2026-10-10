@@ -1,0 +1,14 @@
+node_modules
+*/node_modules
+backend/node_modules
+frontend/node_modules
+frontend/dist
+backend/data/sessions.json
+backend/*.log
+frontend/*.log
+.git
+.gitignore
+.env
+backend/.env
+scripts/
+

@@ -342,6 +342,44 @@ Ngăn kéo trượt ra từ bên phải màn hình thay thế cho Modal khi cầ
 - Chiều rộng quy chuẩn theo 4 nấc: **380px / 520px / 640px / 720px** (ngoại lệ 1100px cho drawer toàn diện).
 - Cấu trúc 3 phần rõ rệt: `sk-drawer__head` (tiêu đề + sub + nút đóng), `sk-drawer__body` (cuộn độc lập), `sk-drawer__foot` (nút Action ghim cố định đáy).
 
+### 5.10 Hệ Thống Form Controls, Input Có Icon & Nguyên Tắc Chống Đè (Collision Prevention)
+
+Khi xây dựng các Modal, Drawer hoặc Toolbar có các trường nhập liệu (Input, Select, Textarea) đi kèm **Icon** và **Description / Helper Text**:
+
+#### 1. Cấu Trúc Bố Cục Chuẩn 3 Tầng Độc Lập
+Tuyệt đối không lồng description hoặc icon chung dòng với input nếu không có wrapper quản lý padding riêng:
+```html
+<div class="form-group">
+  <!-- Tầng 1: Label + Dấu sao bắt buộc + Badge phụ -->
+  <label class="sk-label">
+    <span>TÊN HOSTNAME / MÁY ẢO</span>
+    <span class="sk-label-req">*</span>
+  </label>
+
+  <!-- Tầng 2: Input Wrapper với Icon căn giữa tuyệt đối -->
+  <div class="sk-input-wrapper relative">
+    <span class="sk-input-icon sk-input-icon--left">
+      <svg class="h-4 w-4">...</svg>
+    </span>
+    <input 
+      type="text" 
+      class="input sk-input has-icon-left w-full" 
+      placeholder="vd: debian-server" 
+    />
+  </div>
+
+  <!-- Tầng 3: Description / Chú thích bên dưới (Position Static, Clear Both) -->
+  <p class="sk-help-text">
+    Tên định danh duy nhất của máy ảo trên Proxmox VE
+  </p>
+</div>
+```
+
+#### 2. Quy Tắc Padding Bắt Buộc Khi Có Icon
+- **Left Icon (`.has-icon-left` / `.sk-input-icon--left` / `.pl-10`):** Input **bắt buộc** phải có `padding-left: 38px !important;`. Icon đặt tại `left: 11px; top: 50%; transform: translateY(-50%); pointer-events: none;`.
+- **Right Icon / Action (`.has-icon-right` / `.sk-input-icon--right` / `.pr-10`):** Input **bắt buộc** phải có `padding-right: 38px !important;` để placeholder hoặc văn bản dài không bị đè lên nút xóa / toggle password / đơn vị (MB, GB, ms).
+- **Description / Helper Text (`.sk-help-text`):** Phải luôn là phần tử block nằm tĩnh (`position: static !important; clear: both; margin-top: 5px;`) bên dưới `sk-input-wrapper`, **tuyệt đối không dùng absolute positioning** khiến chữ bị đè lên icon hoặc ô input.
+
 ---
 
 ## 6. Các Lỗi Thường Gặp & Cảnh Báo Tránh Khi Đưa Sang Dự Án Khác
@@ -361,6 +399,7 @@ Ngăn kéo trượt ra từ bên phải màn hình thay thế cho Modal khi cầ
 >    - Tooltips: `1160`
 >    - Toasts / Notifications: `9999`
 > 5. **Bảo toàn hiển thị số liệu:** Luôn đặt `font-variant-numeric: tabular-nums` và `font-family: var(--mono)` cho các cột số để khi số tăng giảm không làm nhảy chiều rộng của cột.
+> 6. **Tránh lỗi đè Icon với Placeholder & Description:** Khi một `<input>` có icon tiền tố (Search, User, Lock, Hostname) hoặc hậu tố, phải dùng lớp `.has-icon-left` / `.has-icon-right` hoặc `.pl-10` có bảo đảm `padding-left: 38px !important;` để không bị shorthand padding của CSS framework ghi đè làm chữ dính vào icon. Description / Help text luôn đặt ở thẻ `<p class="sk-help-text">` nằm riêng bên dưới.
 
 ---
 
@@ -372,4 +411,5 @@ Ngăn kéo trượt ra từ bên phải màn hình thay thế cho Modal khi cầ
 - [ ] **Bước 4: Cài đặt Primitives:** Copy `styles/components/_design-system.scss`, `_buttons.scss`, `_cards.scss`, `_forms.scss`, `_modals.scss`, `_tables.scss`.
 - [ ] **Bước 5: Thiết lập ThemeProvider:** Tạo React Context quản lý `theme` (`'dark'` | `'light'` | `'system'`) và gán thuộc tính `data-theme` vào thẻ `<html>` hoặc `document.documentElement`.
 - [ ] **Bước 6: Khởi tạo Shell:** Áp dụng `Sidebar`, `DashboardLayout`, và `PageTopbar` cho các màn hình chính.
+
 

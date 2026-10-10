@@ -7,7 +7,8 @@
 //   - Xác thực đăng nhập quản trị (ADMIN_USER/ADMIN_PASS trong .env)
 //   - Serve frontend production (frontend/dist) nếu đã build
 // ============================================================================
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import path from 'node:path';
@@ -15,12 +16,49 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Writable } from 'node:stream';
 import ftp from 'basic-ftp';
-import { getMockProxmoxSummary, executeMockProxmoxAction } from './mock-proxmox.js';
+import {
+  getMockProxmoxSummary,
+  executeMockProxmoxAction,
+  getMockNextVmid,
+  getMockTemplates,
+  createMockVm,
+  updateMockVm,
+  deleteMockVm,
+  createMockLxc,
+  updateMockLxc,
+  deleteMockLxc,
+  getMockProxmoxTasks,
+  executeMockProxmoxNodeAction,
+} from './mock-proxmox.js';
+import {
+  isProxmoxConfigured,
+  getRealProxmoxSummary,
+  executeRealProxmoxAction,
+  getRealNextVmid,
+  getRealProxmoxTemplates,
+  getRealProxmoxVms,
+  getRealProxmoxVmConfig,
+  createRealProxmoxVm,
+  updateRealProxmoxVm,
+  deleteRealProxmoxVm,
+  getRealProxmoxLxcs,
+  getRealProxmoxLxcConfig,
+  createRealProxmoxLxc,
+  updateRealProxmoxLxc,
+  deleteRealProxmoxLxc,
+  getRealProxmoxTasks,
+  executeRealProxmoxNodeAction,
+} from './proxmox-client.js';
 import {
   getMockHassSummary,
   executeMockHassAddonAction,
   executeMockHassCoreAction,
 } from './mock-hass.js';
+import {
+  isHassConfigured,
+  getRealHassSummary,
+  executeRealHassCoreAction,
+} from './hass-client.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,6 +70,20 @@ const {
   MTIK_USER = 'admin',
   MTIK_PASS = '',
   PORT = 3000,
+  AUTH_SOURCE = 'routeros', // 'routeros' | 'env' | 'both'
+  ADMIN_USER = '',
+  ADMIN_PASS = '',
+  ADMIN_ROLE = 'admin',
+  ADMIN_NAME = 'Administrator',
+  OPERATOR_USER = '',
+  OPERATOR_PASS = '',
+  OPERATOR_ROLE = 'operator',
+  OPERATOR_NAME = 'Operator',
+  VIEWER_USER = '',
+  VIEWER_PASS = '',
+  VIEWER_ROLE = 'viewer',
+  VIEWER_NAME = 'Viewer',
+  ENV_USERS = '',
 } = process.env;
 
 const REST_BASE = `${MTIK_SCHEME}://${MTIK_HOST}:${MTIK_PORT}/rest`;
@@ -226,16 +278,137 @@ function requireRole(allowedRoles = []) {
 }
 
 // ----------------------------------------------------------------------------
-// Xác thực đăng nhập thuần túy với MikroTik RouterOS (/user)
+// Quản lý tài khoản từ biến môi trường (.env)
+// ----------------------------------------------------------------------------
+function getEnvUsers() {
+  try {
+    dotenv.config({ path: path.join(__dirname, '.env'), override: true });
+  } catch {}
+  const users = [];
+  if (process.env.ADMIN_USER && process.env.ADMIN_PASS) {
+    users.push({
+      id: `env_${process.env.ADMIN_USER.trim()}`,
+      username: process.env.ADMIN_USER.trim(),
+      password: process.env.ADMIN_PASS,
+      role: (process.env.ADMIN_ROLE || 'admin').toLowerCase(),
+      group: mapRoleToGroup(process.env.ADMIN_ROLE || 'admin'),
+      fullName: process.env.ADMIN_NAME || 'Quản trị viên (ENV)',
+      source: 'env',
+    });
+  }
+  if (process.env.OPERATOR_USER && process.env.OPERATOR_PASS) {
+    users.push({
+      id: `env_${process.env.OPERATOR_USER.trim()}`,
+      username: process.env.OPERATOR_USER.trim(),
+      password: process.env.OPERATOR_PASS,
+      role: (process.env.OPERATOR_ROLE || 'operator').toLowerCase(),
+      group: mapRoleToGroup(process.env.OPERATOR_ROLE || 'operator'),
+      fullName: process.env.OPERATOR_NAME || 'Điều hành viên (ENV)',
+      source: 'env',
+    });
+  }
+  if (process.env.VIEWER_USER && process.env.VIEWER_PASS) {
+    users.push({
+      id: `env_${process.env.VIEWER_USER.trim()}`,
+      username: process.env.VIEWER_USER.trim(),
+      password: process.env.VIEWER_PASS,
+      role: (process.env.VIEWER_ROLE || 'viewer').toLowerCase(),
+      group: mapRoleToGroup(process.env.VIEWER_ROLE || 'viewer'),
+      fullName: process.env.VIEWER_NAME || 'Khách xem (ENV)',
+      source: 'env',
+    });
+  }
+  if (process.env.ENV_USERS) {
+    try {
+      const parsed = JSON.parse(process.env.ENV_USERS);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((u) => {
+          if (u.username && u.password) {
+            users.push({
+              id: `env_${u.username.trim()}`,
+              username: u.username.trim(),
+              password: u.password,
+              role: (u.role || 'operator').toLowerCase(),
+              group: mapRoleToGroup(u.role || 'operator'),
+              fullName: u.fullName || u.name || u.username,
+              source: 'env',
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('[auth] Không thể parse JSON từ ENV_USERS:', e.message);
+    }
+  }
+  return users;
+}
+
+function verifyEnvUser(username, password) {
+  const envUsers = getEnvUsers();
+  const uTrim = String(username || '').trim().toLowerCase();
+  return envUsers.find((u) => u.username.toLowerCase() === uTrim && u.password === password) || null;
+}
+
+// ----------------------------------------------------------------------------
+// API cấu hình Auth (hỗ trợ kiểm tra chế độ xác thực)
+// ----------------------------------------------------------------------------
+app.get('/api/auth/config', (_req, res) => {
+  try {
+    dotenv.config({ path: path.join(__dirname, '.env'), override: true });
+  } catch {}
+  const authSource = (process.env.AUTH_SOURCE || 'routeros').toLowerCase().trim();
+  res.json({
+    ok: true,
+    authSource,
+    routerHost: process.env.MTIK_HOST || MTIK_HOST,
+  });
+});
+
+// ----------------------------------------------------------------------------
+// Xác thực đăng nhập (Hỗ trợ AUTH_SOURCE: 'routeros' | 'env' | 'both')
 // ----------------------------------------------------------------------------
 app.post('/api/auth/login', async (req, res) => {
+  try {
+    dotenv.config({ path: path.join(__dirname, '.env'), override: true });
+  } catch {}
   const { username = '', password = '', rememberMe = true } = req.body || {};
   const userTrim = username.trim();
   if (!userTrim) {
-    return res.status(400).json({ error: 'Vui lòng nhập tên tài khoản MikroTik.' });
+    return res.status(400).json({ error: 'Vui lòng nhập tên tài khoản đăng nhập.' });
   }
 
-  // Xác thực trực tiếp qua MikroTik RouterOS REST API
+  const authSource = (process.env.AUTH_SOURCE || 'routeros').toLowerCase().trim();
+
+  // 1. Kiểm tra xác thực qua file .env (nếu AUTH_SOURCE = 'env' hoặc 'both')
+  if (authSource === 'env' || authSource === 'both') {
+    const matchedEnvUser = verifyEnvUser(userTrim, password);
+    if (matchedEnvUser) {
+      const now = Date.now();
+      const expiresAt = now + (rememberMe !== false ? THREE_DAYS_MS : 24 * 60 * 60 * 1000);
+      const token = `tk_${Math.random().toString(36).slice(2)}${now.toString(36)}`;
+      const session = {
+        id: matchedEnvUser.id,
+        username: matchedEnvUser.username,
+        group: matchedEnvUser.group,
+        role: matchedEnvUser.role,
+        fullName: matchedEnvUser.fullName,
+        source: 'env',
+        createdAt: now,
+        expiresAt,
+        rememberMe: rememberMe !== false,
+      };
+      tokens.set(token, session);
+      saveSessions();
+      return res.json({ ok: true, token, expiresAt, ...session });
+    }
+
+    // Nếu người dùng chọn CHỈ xác thực từ .env
+    if (authSource === 'env') {
+      return res.status(401).json({ error: 'Sai tài khoản hoặc mật khẩu đăng nhập (.env).' });
+    }
+  }
+
+  // 2. Xác thực trực tiếp qua MikroTik RouterOS REST API (khi AUTH_SOURCE = 'routeros' hoặc 'both')
   try {
     const authHeader = 'Basic ' + Buffer.from(`${userTrim}:${password}`).toString('base64');
     const mtikRes = await fetch(`${REST_BASE}/user`, {
@@ -270,6 +443,7 @@ app.post('/api/auth/login', async (req, res) => {
         group,
         role,
         fullName,
+        source: 'routeros',
         createdAt: now,
         expiresAt,
         rememberMe: rememberMe !== false,
@@ -306,21 +480,41 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
 });
 
 // ----------------------------------------------------------------------------
-// Quản lý System Users trực tiếp trên MikroTik RouterOS (/user)
+// Quản lý System Users trực tiếp trên MikroTik RouterOS (/user) & .env
 // ----------------------------------------------------------------------------
 app.get('/api/admin/users', requireAuth, requireRole(['admin']), async (req, res) => {
+  const authSource = (process.env.AUTH_SOURCE || 'routeros').toLowerCase().trim();
+  const envList = (authSource === 'env' || authSource === 'both')
+    ? getEnvUsers().map((u) => ({
+        id: u.id,
+        username: u.username,
+        group: u.group,
+        role: u.role,
+        fullName: `${u.fullName} (.env)`,
+        disabled: 'false',
+        source: 'env',
+      }))
+    : [];
+
   try {
-    const list = await mtik('GET', '/user');
-    const safe = (Array.isArray(list) ? list : []).map((u) => ({
-      id: u['.id'],
-      username: u.name,
-      group: u.group || 'read',
-      role: mapGroupToRole(u.group),
-      fullName: u.comment || '',
-      disabled: u.disabled || 'false',
-    }));
-    res.json(safe);
+    let safe = [];
+    if (authSource !== 'env') {
+      const list = await mtik('GET', '/user');
+      safe = (Array.isArray(list) ? list : []).map((u) => ({
+        id: u['.id'],
+        username: u.name,
+        group: u.group || 'read',
+        role: mapGroupToRole(u.group),
+        fullName: u.comment || '',
+        disabled: u.disabled || 'false',
+        source: 'routeros',
+      }));
+    }
+    res.json([...envList, ...safe]);
   } catch (err) {
+    if (envList.length > 0) {
+      return res.json(envList);
+    }
     res.status(err.status || 500).json({ error: err.message });
   }
 });
@@ -966,26 +1160,270 @@ app.delete('/api/hosts/:id', requireRole(['admin', 'operator']), async (req, res
   }
 });
 
-// DHCP Leases trực tiếp
-app.get('/api/dhcp/leases', async (req, res) => {
+// ----------------------------------------------------------------------------
+// DHCP Servers & Static Leases Management (/ip/dhcp-server & /ip/dhcp-server/lease)
+// ----------------------------------------------------------------------------
+app.get('/api/dhcp/servers', async (req, res) => {
   try {
-    const list = await mtik('GET', '/ip/dhcp-server/lease');
-    const safe = (Array.isArray(list) ? list : []).map((l) => ({
-      id: l['.id'] || l['mac-address'],
-      ipAddress: l.address || '',
-      macAddress: l['mac-address'] || '',
-      hostName: l['host-name'] || '',
-      server: l.server || '',
-      status: l.status || 'bound',
-      lastSeen: l['last-seen'] || '',
-      expiresAfter: l['expires-after'] || '',
-      dynamic: l.dynamic !== 'false',
-      comment: l.comment || '',
-      disabled: l.disabled === 'true',
+    const list = await mtik('GET', '/ip/dhcp-server');
+    const safe = (Array.isArray(list) ? list : []).map((s) => ({
+      id: s['.id'] || s.name,
+      name: s.name || '',
+      interface: s.interface || '',
+      leaseTime: s['lease-time'] || '',
+      addressPool: s['address-pool'] || '',
+      disabled: s.disabled === 'true',
     }));
     res.json(safe);
   } catch (err) {
+    res.status(err.status || 500).json({ error: 'Không thể lấy danh sách DHCP Server: ' + err.message });
+  }
+});
+
+// DHCP Leases trực tiếp kết hợp với ARP & Hotspot Hosts (đảm bảo thiết bị động luôn hiển thị)
+app.get('/api/dhcp/leases', async (req, res) => {
+  try {
+    const [leasesRaw, hostsRaw, arpRaw] = await Promise.all([
+      mtik('GET', '/ip/dhcp-server/lease').catch(() => []),
+      mtik('GET', '/ip/hotspot/host').catch(() => []),
+      mtik('GET', '/ip/arp').catch(() => []),
+    ]);
+
+    const leases = Array.isArray(leasesRaw) ? leasesRaw : [];
+    const hosts = Array.isArray(hostsRaw) ? hostsRaw : [];
+    const arp = Array.isArray(arpRaw) ? arpRaw : [];
+
+    const leaseMacMap = new Map();
+    const result = [];
+
+    // 1. Toàn bộ bản ghi từ /ip/dhcp-server/lease
+    leases.forEach((l) => {
+      const mac = String(l['mac-address'] || l['active-mac-address'] || '').toUpperCase();
+      const item = {
+        id: l['.id'] || mac,
+        ipAddress: l.address || l['active-address'] || '',
+        macAddress: mac,
+        hostName: l['host-name'] || '',
+        server: l.server || l['active-server'] || 'all',
+        status: l.status || 'bound',
+        lastSeen: l['last-seen'] || '',
+        expiresAfter: l['expires-after'] || '',
+        dynamic: l.dynamic !== 'false' && l.dynamic !== false,
+        comment: l.comment || '',
+        disabled: l.disabled === 'true' || l.disabled === true,
+      };
+      if (mac) leaseMacMap.set(mac, item);
+      result.push(item);
+    });
+
+    // 2. Bổ sung các thiết bị đang kết nối thực tế trong ARP / Hotspot Host nếu chưa có trong lease table
+    const seenMacs = new Set(leaseMacMap.keys());
+
+    // Hotspot Hosts
+    hosts.forEach((h) => {
+      const mac = String(h['mac-address'] || h.mac_address || '').toUpperCase();
+      if (!mac || seenMacs.has(mac)) return;
+      const ip = h.address || h['to-address'] || '';
+      if (!ip) return;
+
+      seenMacs.add(mac);
+      result.push({
+        id: h['.id'] || mac,
+        ipAddress: ip,
+        macAddress: mac,
+        hostName: h.comment || '',
+        server: h.server || 'all',
+        status: 'bound',
+        lastSeen: h.uptime ? `active (${h.uptime})` : 'active',
+        expiresAfter: '',
+        dynamic: true,
+        comment: h.comment || '',
+        disabled: false,
+      });
+    });
+
+    // ARP Table (LAN clients)
+    arp.forEach((a) => {
+      const mac = String(a['mac-address'] || '').toUpperCase();
+      if (!mac || seenMacs.has(mac)) return;
+      const ip = a.address || '';
+      if (!ip || a.invalid === 'true' || a.disabled === 'true') return;
+      // Bỏ qua địa chỉ broadcast hoặc WAN
+      if (ip.startsWith('127.') || ip.startsWith('169.254.') || ip.endsWith('.255')) return;
+
+      seenMacs.add(mac);
+      result.push({
+        id: a['.id'] || mac,
+        ipAddress: ip,
+        macAddress: mac,
+        hostName: a.comment || '',
+        server: a.interface || 'all',
+        status: a.status === 'reachable' ? 'bound' : 'waiting',
+        lastSeen: 'active (arp)',
+        expiresAfter: '',
+        dynamic: true,
+        comment: a.comment || '',
+        disabled: false,
+      });
+    });
+
+    res.json(result);
+  } catch (err) {
     res.status(err.status || 500).json({ error: 'Không thể lấy danh sách DHCP Leases: ' + err.message });
+  }
+});
+
+// Thêm mới IP Tĩnh (Static DHCP Lease)
+app.post('/api/dhcp/leases', requireRole(['admin', 'operator']), async (req, res) => {
+  const { ipAddress, macAddress, server, hostName = '', comment = '', disabled = false } = req.body || {};
+  if (!ipAddress || !macAddress) {
+    return res.status(400).json({ error: 'Vui lòng nhập đầy đủ Địa chỉ IP và MAC Address.' });
+  }
+
+  const cleanMac = macAddress.trim().toUpperCase();
+  const cleanIp = ipAddress.trim();
+
+  try {
+    const payload = {
+      address: cleanIp,
+      'mac-address': cleanMac,
+      comment: comment ? comment.trim() : (hostName ? hostName.trim() : undefined),
+      disabled: disabled ? 'true' : 'false',
+    };
+    if (server && server !== 'all' && server !== 'all (Tất cả Server)') {
+      payload.server = server.trim();
+    }
+
+    let created;
+    try {
+      created = await mtik('PUT', '/ip/dhcp-server/lease', payload);
+    } catch (putErr) {
+      try {
+        created = await mtik('POST', '/ip/dhcp-server/lease', payload);
+      } catch {
+        created = await mtik('POST', '/ip/dhcp-server/lease/add', payload);
+      }
+    }
+
+    res.status(201).json({
+      ok: true,
+      id: created?.['.id'] || created?.ret || cleanMac,
+      ipAddress: cleanIp,
+      macAddress: cleanMac,
+      hostName: hostName || '',
+      server: payload.server || 'all',
+      dynamic: false,
+      comment: payload.comment || '',
+      disabled: Boolean(disabled),
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: 'Không thể tạo IP tĩnh: ' + err.message });
+  }
+});
+
+// Chỉnh sửa IP Tĩnh (Update Static/Dynamic DHCP Lease)
+app.put('/api/dhcp/leases/:id', requireRole(['admin', 'operator']), async (req, res) => {
+  const { id } = req.params;
+  const { ipAddress, macAddress, server, hostName, comment, disabled } = req.body || {};
+  try {
+    const payload = {};
+    if (ipAddress) payload.address = ipAddress.trim();
+    if (macAddress) payload['mac-address'] = macAddress.trim().toUpperCase();
+    if (server !== undefined) {
+      if (server && server !== 'all' && server !== 'all (Tất cả Server)') {
+        payload.server = server.trim();
+      }
+    }
+    if (comment !== undefined) {
+      payload.comment = comment.trim();
+    } else if (hostName !== undefined) {
+      payload.comment = hostName.trim();
+    }
+    if (disabled !== undefined) payload.disabled = disabled ? 'true' : 'false';
+
+    // 1. Kiểm tra xem lease có phải là dynamic không
+    let isDynamic = false;
+    try {
+      const current = await mtik('GET', `/ip/dhcp-server/lease/${encodeURIComponent(id)}`);
+      if (current && (current.dynamic === 'true' || current.dynamic === true)) {
+        isDynamic = true;
+      }
+    } catch {
+      /* bỏ qua nếu không lấy được */
+    }
+
+    // 2. Nếu là dynamic lease, gọi make-static trước để chuyển thành static
+    if (isDynamic) {
+      try {
+        await mtik('POST', '/ip/dhcp-server/lease/make-static', { numbers: id });
+      } catch {
+        try {
+          await mtik('POST', `/ip/dhcp-server/lease/${encodeURIComponent(id)}/make-static`, {});
+        } catch {}
+      }
+    }
+
+    // 3. Tiến hành PATCH cập nhật IP mới và các thông số
+    let updated;
+    try {
+      updated = await mtik('PATCH', `/ip/dhcp-server/lease/${encodeURIComponent(id)}`, payload);
+    } catch (patchErr) {
+      // Nếu PATCH báo lỗi "can not change dynamic lease", thử make-static rồi PATCH lại
+      if (String(patchErr.message || '').includes('dynamic')) {
+        try {
+          await mtik('POST', '/ip/dhcp-server/lease/make-static', { numbers: id });
+          updated = await mtik('PATCH', `/ip/dhcp-server/lease/${encodeURIComponent(id)}`, payload);
+        } catch {
+          updated = await mtik('PUT', `/ip/dhcp-server/lease/${encodeURIComponent(id)}`, payload);
+        }
+      } else {
+        updated = await mtik('PUT', `/ip/dhcp-server/lease/${encodeURIComponent(id)}`, payload);
+      }
+    }
+
+    res.json(updated || { ok: true });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: 'Không thể cập nhật IP tĩnh: ' + err.message });
+  }
+});
+
+// Chuyển Lease động thành IP Tĩnh (Make Static)
+app.post('/api/dhcp/leases/:id/make-static', requireRole(['admin', 'operator']), async (req, res) => {
+  const { id } = req.params;
+  const { comment } = req.body || {};
+  try {
+    // 1. Gọi lệnh make-static chuẩn RouterOS 7 ({ numbers: id })
+    try {
+      await mtik('POST', '/ip/dhcp-server/lease/make-static', { numbers: id });
+    } catch {
+      try {
+        await mtik('POST', `/ip/dhcp-server/lease/${encodeURIComponent(id)}/make-static`, {});
+      } catch {}
+    }
+
+    // 2. Cập nhật comment nếu có
+    if (comment !== undefined && comment !== null) {
+      const patchPayload = { comment: String(comment).trim() };
+      try {
+        await mtik('PATCH', `/ip/dhcp-server/lease/${encodeURIComponent(id)}`, patchPayload);
+      } catch {}
+    }
+
+    res.json({ ok: true, message: 'Đã chuyển thành IP tĩnh thành công' });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: 'Không thể chuyển thành IP tĩnh: ' + err.message });
+  }
+});
+
+// Chuyển Lease tĩnh thành IP Động (Make Dynamic - Xóa cố định Static Lease để Router tự cấp phát IP Động)
+app.post('/api/dhcp/leases/:id/make-dynamic', requireRole(['admin', 'operator']), async (req, res) => {
+  const { id } = req.params;
+  try {
+    // Trên MikroTik RouterOS, xóa bản ghi static lease sẽ đưa thiết bị trở về chế độ IP động do DHCP Server tự động cấp phát
+    await mtik('DELETE', `/ip/dhcp-server/lease/${encodeURIComponent(id)}`);
+    res.json({ ok: true, message: 'Đã chuyển sang IP động thành công' });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: 'Không thể chuyển sang IP động: ' + err.message });
   }
 });
 
@@ -1176,39 +1614,18 @@ app.delete('/api/router/backups/:id', requireRole(['admin']), async (req, res) =
 });
 
 // ----------------------------------------------------------------------------
-// PROXMOX VE HYPERVISOR PERFORMANCE & MONITORING API
+// PROXMOX VE HYPERVISOR PERFORMANCE & MONITORING API (REAL & MOCK)
 // ----------------------------------------------------------------------------
-const {
-  PROXMOX_HOST,
-  PROXMOX_PORT = '8006',
-  PROXMOX_TOKEN_ID,
-  PROXMOX_TOKEN_SECRET,
-} = process.env;
 
-// Lấy tóm tắt hiệu năng Proxmox VE (Real hoặc Mock)
+// Lấy tóm tắt hiệu năng Proxmox VE (Real hoặc Mock fallback)
 app.get('/api/proxmox/summary', async (req, res) => {
   try {
-    if (PROXMOX_HOST && PROXMOX_TOKEN_ID && PROXMOX_TOKEN_SECRET) {
-      // Kết nối Proxmox VE thật qua REST API
-      const authHeader = `PVEAPIToken=${PROXMOX_TOKEN_ID}=${PROXMOX_TOKEN_SECRET}`;
-      const baseUrl = `https://${PROXMOX_HOST}:${PROXMOX_PORT}/api2/json`;
-      const opt = {
-        headers: { Authorization: authHeader },
-        // Bỏ qua chứng chỉ SSL tự ký của Proxmox
-        signal: AbortSignal.timeout(5000),
-      };
-      // Gọi API PVE thực tế
-      const [nodesRes, versionRes] = await Promise.all([
-        fetch(`${baseUrl}/nodes`, opt).then((r) => r.json()).catch(() => null),
-        fetch(`${baseUrl}/version`, opt).then((r) => r.json()).catch(() => null),
-      ]);
-      if (nodesRes && nodesRes.data) {
-        return res.json({
-          mode: 'real',
-          host: PROXMOX_HOST,
-          version: versionRes?.data?.version || '8.x',
-          nodes: nodesRes.data,
-        });
+    if (isProxmoxConfigured()) {
+      try {
+        const realData = await getRealProxmoxSummary();
+        return res.json(realData);
+      } catch (err) {
+        console.warn('[proxmox] Không thể kết nối Proxmox VE thật, chuyển sang Mock:', err.message);
       }
     }
 
@@ -1221,7 +1638,7 @@ app.get('/api/proxmox/summary', async (req, res) => {
 });
 
 // Luồng Server-Sent Events (SSE) đẩy dữ liệu Proxmox VE thời gian thực
-app.get('/api/proxmox/events', (req, res) => {
+app.get('/api/proxmox/events', async (req, res) => {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -1229,16 +1646,27 @@ app.get('/api/proxmox/events', (req, res) => {
     'Access-Control-Allow-Origin': '*',
   });
 
+  async function fetchProxmox() {
+    if (isProxmoxConfigured()) {
+      try {
+        return await getRealProxmoxSummary();
+      } catch (err) {
+        // Fallback to mock on connection glitch
+      }
+    }
+    return getMockProxmoxSummary();
+  }
+
   // Gửi gói đầu tiên ngay khi kết nối
   try {
-    const initial = getMockProxmoxSummary();
+    const initial = await fetchProxmox();
     res.write(`data: ${JSON.stringify(initial)}\n\n`);
   } catch {}
 
-  const intervalMs = 1500; // 1.5 giây một lần
-  const timer = setInterval(() => {
+  const intervalMs = 2000; // 2 giây một lần cho Real Proxmox API
+  const timer = setInterval(async () => {
     try {
-      const payload = getMockProxmoxSummary();
+      const payload = await fetchProxmox();
       res.write(`data: ${JSON.stringify(payload)}\n\n`);
     } catch {
       clearInterval(timer);
@@ -1250,11 +1678,56 @@ app.get('/api/proxmox/events', (req, res) => {
   });
 });
 
-// Thực hiện tác vụ điều khiển máy ảo / container (start, stop, reboot)
-app.post('/api/proxmox/guests/:type/:vmid/action', (req, res) => {
-  const { type, vmid } = req.params;
-  const { action } = req.body;
+
+// Điều khiển nguồn máy chủ vật lý Proxmox Node (Reboot / Shutdown)
+app.post('/api/proxmox/node/action', requireRole(['admin']), async (req, res) => {
+  const { command = 'reboot' } = req.body || {};
   try {
+    if (isProxmoxConfigured()) {
+      const result = await executeRealProxmoxNodeAction(command);
+      return res.json(result);
+    }
+    const result = executeMockProxmoxNodeAction(command);
+    res.json(result);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: 'Lỗi điều khiển nguồn máy chủ Proxmox: ' + err.message });
+  }
+});
+
+// Điều khiển nguồn MikroTik RouterOS (Reboot / Shutdown)
+app.post('/api/router/reboot', requireRole(['admin']), async (req, res) => {
+  try {
+    await mtik('POST', '/system/reboot', {});
+    res.json({ ok: true, message: 'Đang khởi động lại Router MikroTik...' });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: 'Không thể khởi động lại Router: ' + err.message });
+  }
+});
+
+app.post('/api/router/shutdown', requireRole(['admin']), async (req, res) => {
+  try {
+    await mtik('POST', '/system/shutdown', {});
+    res.json({ ok: true, message: 'Đang tắt nguồn Router MikroTik...' });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: 'Không thể tắt nguồn Router: ' + err.message });
+  }
+});
+
+// Thực hiện tác vụ điều khiển máy ảo / container (start, stop, reboot)
+app.post('/api/proxmox/guests/:type/:vmid/action', requireRole(['admin', 'operator']), async (req, res) => {
+  const { type, vmid } = req.params;
+  const { action } = req.body || {};
+  try {
+    if (isProxmoxConfigured()) {
+      try {
+        const result = await executeRealProxmoxAction(type, vmid, action);
+        return res.json(result);
+      } catch (err) {
+        console.warn(`[proxmox] Lỗi thực thi tác vụ trên Proxmox thật (${type} ${vmid}):`, err.message);
+        return res.status(err.status || 500).json({ error: err.message });
+      }
+    }
+
     const result = executeMockProxmoxAction(type, vmid, action);
     res.json(result);
   } catch (err) {
@@ -1262,95 +1735,265 @@ app.post('/api/proxmox/guests/:type/:vmid/action', (req, res) => {
   }
 });
 
+// ----------------------------------------------------------------------------
+// PROXMOX VE VM & CONTAINER (LXC) MANAGEMENT CRUD ENDPOINTS
+// ----------------------------------------------------------------------------
+
+// Lấy Next VMID khả dụng
+app.get('/api/proxmox/nextid', requireAuth, async (req, res) => {
+  try {
+    if (isProxmoxConfigured()) {
+      const nextId = await getRealNextVmid();
+      return res.json({ nextId });
+    }
+    const nextId = getMockNextVmid();
+    res.json({ nextId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// Lấy danh sách Task Logs gần nhất
+app.get('/api/proxmox/tasks', requireAuth, async (req, res) => {
+  try {
+    const limit = Number(req.query.limit) || 50;
+    if (isProxmoxConfigured()) {
+      const tasks = await getRealProxmoxTasks(limit);
+      return res.json(tasks);
+    }
+    const tasks = getMockProxmoxTasks(limit);
+    res.json(tasks);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Lấy danh sách Template & ISO
+app.get('/api/proxmox/templates', requireAuth, async (req, res) => {
+  try {
+    if (isProxmoxConfigured()) {
+      const templates = await getRealProxmoxTemplates();
+      return res.json(templates);
+    }
+    const templates = getMockTemplates();
+    res.json(templates);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Quản trị Máy ảo (VM / QEMU) ---
+
+// Danh sách VM
+app.get('/api/proxmox/vms', requireAuth, async (req, res) => {
+  try {
+    if (isProxmoxConfigured()) {
+      const vms = await getRealProxmoxVms();
+      return res.json(vms);
+    }
+    const summary = getMockProxmoxSummary();
+    res.json(summary.vms || []);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Chi tiết cấu hình 1 VM
+app.get('/api/proxmox/vms/:vmid/config', requireAuth, async (req, res) => {
+  try {
+    const { vmid } = req.params;
+    if (isProxmoxConfigured()) {
+      const config = await getRealProxmoxVmConfig(vmid);
+      return res.json(config);
+    }
+    const summary = getMockProxmoxSummary();
+    const vm = (summary.vms || []).find((v) => v.vmid === Number(vmid));
+    if (!vm) return res.status(404).json({ error: 'Không tìm thấy VM' });
+    res.json(vm);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Tạo VM mới
+app.post('/api/proxmox/vms', requireAuth, requireRole(['admin', 'operator']), async (req, res) => {
+  try {
+    if (isProxmoxConfigured()) {
+      const result = await createRealProxmoxVm(req.body);
+      return res.status(201).json(result);
+    }
+    const created = createMockVm(req.body);
+    res.status(201).json({ success: true, mode: 'mock', ...created });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+// Cập nhật VM
+app.put('/api/proxmox/vms/:vmid', requireAuth, requireRole(['admin', 'operator']), async (req, res) => {
+  try {
+    const { vmid } = req.params;
+    if (isProxmoxConfigured()) {
+      const result = await updateRealProxmoxVm(vmid, req.body);
+      return res.json(result);
+    }
+    const updated = updateMockVm(vmid, req.body);
+    res.json({ success: true, mode: 'mock', ...updated });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+// Xóa VM
+app.delete('/api/proxmox/vms/:vmid', requireAuth, requireRole(['admin']), async (req, res) => {
+  try {
+    const { vmid } = req.params;
+    const purge = req.query.purge !== 'false';
+    if (isProxmoxConfigured()) {
+      const result = await deleteRealProxmoxVm(vmid, purge);
+      return res.json(result);
+    }
+    const result = deleteMockVm(vmid);
+    res.json({ success: true, mode: 'mock', ...result });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+// --- Quản trị Containers (LXC / CT) ---
+
+// Danh sách LXC
+app.get('/api/proxmox/lxcs', requireAuth, async (req, res) => {
+  try {
+    if (isProxmoxConfigured()) {
+      const lxcs = await getRealProxmoxLxcs();
+      return res.json(lxcs);
+    }
+    const summary = getMockProxmoxSummary();
+    res.json(summary.lxcs || []);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Chi tiết cấu hình 1 LXC
+app.get('/api/proxmox/lxcs/:vmid/config', requireAuth, async (req, res) => {
+  try {
+    const { vmid } = req.params;
+    if (isProxmoxConfigured()) {
+      const config = await getRealProxmoxLxcConfig(vmid);
+      return res.json(config);
+    }
+    const summary = getMockProxmoxSummary();
+    const lxc = (summary.lxcs || []).find((c) => c.vmid === Number(vmid));
+    if (!lxc) return res.status(404).json({ error: 'Không tìm thấy LXC' });
+    res.json(lxc);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Tạo LXC mới
+app.post('/api/proxmox/lxcs', requireAuth, requireRole(['admin', 'operator']), async (req, res) => {
+  try {
+    if (isProxmoxConfigured()) {
+      const result = await createRealProxmoxLxc(req.body);
+      return res.status(201).json(result);
+    }
+    const created = createMockLxc(req.body);
+    res.status(201).json({ success: true, mode: 'mock', ...created });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+// Cập nhật LXC
+app.put('/api/proxmox/lxcs/:vmid', requireAuth, requireRole(['admin', 'operator']), async (req, res) => {
+  try {
+    const { vmid } = req.params;
+    if (isProxmoxConfigured()) {
+      const result = await updateRealProxmoxLxc(vmid, req.body);
+      return res.json(result);
+    }
+    const updated = updateMockLxc(vmid, req.body);
+    res.json({ success: true, mode: 'mock', ...updated });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+// Xóa LXC
+app.delete('/api/proxmox/lxcs/:vmid', requireAuth, requireRole(['admin']), async (req, res) => {
+  try {
+    const { vmid } = req.params;
+    const purge = req.query.purge !== 'false';
+    if (isProxmoxConfigured()) {
+      const result = await deleteRealProxmoxLxc(vmid, purge);
+      return res.json(result);
+    }
+    const result = deleteMockLxc(vmid);
+    res.json({ success: true, mode: 'mock', ...result });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
 // ============================================================================
 // Giám sát Home Assistant OS (HassOS) - Hỗ trợ Real REST/Supervisor API & Mock
 // ============================================================================
-const {
-  HASS_URL = '', // Ví dụ: http://192.168.20.10:8123
-  HASS_TOKEN = '', // Long-Lived Access Token
-} = process.env;
+
+// Helper lấy dữ liệu Hass (Real hoặc Mock fallback) với bộ nhớ đệm ngắn 1500ms
+let cachedHassData = null;
+let lastHassFetchTime = 0;
+let hassFetchPromise = null;
+
+async function fetchHassData() {
+  const now = Date.now();
+  if (cachedHassData && now - lastHassFetchTime < 1500) {
+    return cachedHassData;
+  }
+
+  if (hassFetchPromise) {
+    return hassFetchPromise;
+  }
+
+  hassFetchPromise = (async () => {
+    try {
+      if (isHassConfigured()) {
+        try {
+          const real = await getRealHassSummary();
+          cachedHassData = real;
+          lastHassFetchTime = Date.now();
+          return real;
+        } catch (err) {
+          console.warn('[HassOS] Không thể lấy dữ liệu từ HassOS thật, chuyển Mock:', err.message);
+        }
+      }
+      const mock = getMockHassSummary();
+      cachedHassData = mock;
+      lastHassFetchTime = Date.now();
+      return mock;
+    } finally {
+      hassFetchPromise = null;
+    }
+  })();
+
+  return hassFetchPromise;
+}
 
 // Lấy tóm tắt chỉ số Home Assistant OS
 app.get('/api/hass/summary', async (req, res) => {
   try {
-    if (HASS_URL && HASS_TOKEN) {
-      // Gọi REST API của Home Assistant thực tế
-      const cleanUrl = HASS_URL.replace(/\/+$/, '');
-      const opt = {
-        headers: {
-          Authorization: `Bearer ${HASS_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-        signal: AbortSignal.timeout(5000),
-      };
-
-      try {
-        const [configRes, statesRes, infoRes] = await Promise.all([
-          fetch(`${cleanUrl}/api/config`, opt).then((r) => r.json()).catch(() => null),
-          fetch(`${cleanUrl}/api/states`, opt).then((r) => r.json()).catch(() => null),
-          fetch(`${cleanUrl}/api/hassio/info`, opt).then((r) => r.json()).catch(() => null),
-        ]);
-
-        if (configRes && configRes.version) {
-          const statesList = Array.isArray(statesRes) ? statesRes : [];
-          const domainsMap = {};
-          let activeCount = 0;
-          let unavailCount = 0;
-
-          statesList.forEach((st) => {
-            const domain = st.entity_id?.split('.')[0] || 'other';
-            domainsMap[domain] = (domainsMap[domain] || 0) + 1;
-            if (st.state === 'unavailable') unavailCount += 1;
-            else activeCount += 1;
-          });
-
-          return res.json({
-            mode: 'real',
-            status: 'connected',
-            timestamp: new Date().toISOString(),
-            host: {
-              hostname: configRes.location_name || 'Home Assistant',
-              operatingSystem: infoRes?.data?.operating_system || 'Home Assistant OS',
-              supervisorVersion: infoRes?.data?.supervisor || 'supervisor-latest',
-              coreVersion: `core-${configRes.version}`,
-              architecture: infoRes?.data?.arch || 'aarch64',
-              board: infoRes?.data?.board || 'generic',
-              channel: infoRes?.data?.channel || 'stable',
-              ipAddress: cleanUrl.replace(/^https?:\/\//, '').split(':')[0],
-              port: parseInt(cleanUrl.split(':')[2] || '8123', 10),
-              uptimeSeconds: 0,
-            },
-            telemetry: {
-              cpu: { usagePercent: 12.5, cores: 4, temperatureC: 45.0 },
-              memory: { totalBytes: 8589934592, usedBytes: 3221225472, freeBytes: 5368709120, percentage: 37.5 },
-              disk: { totalBytes: 137438953472, usedBytes: 30737418240, freeBytes: 106701535232, percentage: 22.4 },
-              network: { rxKbps: 450, txKbps: 680, rxMbps: 0.44, txMbps: 0.66 },
-            },
-            entitiesStats: {
-              total: statesList.length,
-              active: activeCount,
-              unavailable: unavailCount,
-              unknown: 0,
-              domains: domainsMap,
-            },
-            addons: { total: 0, running: 0, stopped: 0, items: [] },
-          });
-        }
-      } catch (realErr) {
-        console.warn('[HassOS] Không thể kết nối HassOS thật:', realErr.message);
-      }
-    }
-
-    // Chế độ giả lập Mock (khi chưa có hệ thống thật)
-    const mockData = getMockHassSummary();
-    res.json(mockData);
+    const data = await fetchHassData();
+    res.json(data);
   } catch (err) {
     res.status(500).json({ error: 'Lỗi lấy dữ liệu Home Assistant OS: ' + err.message });
   }
 });
 
 // Luồng Server-Sent Events (SSE) đẩy dữ liệu HassOS thời gian thực
-app.get('/api/hass/events', (req, res) => {
+app.get('/api/hass/events', async (req, res) => {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -1358,23 +2001,30 @@ app.get('/api/hass/events', (req, res) => {
     'Access-Control-Allow-Origin': '*',
   });
 
-  try {
-    const initial = getMockHassSummary();
-    res.write(`data: ${JSON.stringify(initial)}\n\n`);
-  } catch {}
+  let isClosed = false;
+  let timer = null;
 
-  const intervalMs = 1500;
-  const timer = setInterval(() => {
+  async function pushEvent() {
+    if (isClosed) return;
     try {
-      const payload = getMockHassSummary();
-      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+      const payload = await fetchHassData();
+      if (!isClosed) {
+        res.write('data: ' + JSON.stringify(payload) + '\n\n');
+      }
     } catch {
-      clearInterval(timer);
+      // Bỏ qua lỗi tạm thời
+    } finally {
+      if (!isClosed) {
+        timer = setTimeout(pushEvent, 2000);
+      }
     }
-  }, intervalMs);
+  }
+
+  pushEvent();
 
   req.on('close', () => {
-    clearInterval(timer);
+    isClosed = true;
+    if (timer) clearTimeout(timer);
   });
 });
 
@@ -1391,9 +2041,17 @@ app.post('/api/hass/addons/:slug/action', (req, res) => {
 });
 
 // Điều khiển hệ thống Core / Supervisor / Host của HassOS
-app.post('/api/hass/core/action', (req, res) => {
+app.post('/api/hass/core/action', async (req, res) => {
   const { action } = req.body || {};
   try {
+    if (isHassConfigured()) {
+      try {
+        const result = await executeRealHassCoreAction(action);
+        return res.json(result);
+      } catch (err) {
+        console.warn('[HassOS] Lỗi gọi Action trên Hass thật:', err.message);
+      }
+    }
     const result = executeMockHassCoreAction(action);
     res.json(result);
   } catch (err) {
@@ -1402,9 +2060,159 @@ app.post('/api/hass/core/action', (req, res) => {
 });
 
 // ----------------------------------------------------------------------------
+// Sổ quản lý IP (IPAM - IP Address Management) - Lưu JSON tại backend/data/ip-plan.json
+// ----------------------------------------------------------------------------
+const IPAM_FILE = path.join(__dirname, 'data', 'ip-plan.json');
+const IPAM_DEFAULT_FILE = path.join(__dirname, 'data', 'ip-plan.default.json');
+
+function loadIpamData() {
+  try {
+    if (fs.existsSync(IPAM_FILE)) {
+      const raw = fs.readFileSync(IPAM_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+    if (fs.existsSync(IPAM_DEFAULT_FILE)) {
+      const raw = fs.readFileSync(IPAM_DEFAULT_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (err) {
+    console.warn('[ipam] Không thể đọc ip-plan.json:', err.message);
+  }
+  return [];
+}
+
+function saveIpamData(list) {
+  try {
+    const dir = path.dirname(IPAM_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(IPAM_FILE, JSON.stringify(list, null, 2), 'utf-8');
+    return true;
+  } catch (err) {
+    console.error('[ipam] Không thể ghi ip-plan.json:', err.message);
+    throw new Error('Lỗi khi lưu dữ liệu sổ quản lý IP vào tệp tin');
+  }
+}
+
+// Lấy danh sách IP logbook
+app.get('/api/ipam', requireAuth, (_req, res) => {
+  const data = loadIpamData();
+  res.json({ ok: true, data });
+});
+
+// Thêm mới mục IP logbook
+app.post('/api/ipam', requireAuth, requireRole(['admin', 'operator']), (req, res) => {
+  const body = req.body || {};
+  if (!body.ip || !String(body.ip).trim()) {
+    return res.status(400).json({ error: 'Địa chỉ IP hoặc dải IP là bắt buộc' });
+  }
+  if (!body.name || !String(body.name).trim()) {
+    return res.status(400).json({ error: 'Tên thiết bị / dịch vụ là bắt buộc' });
+  }
+
+  const list = loadIpamData();
+  const nowIso = new Date().toISOString();
+  
+  const newItem = {
+    id: body.id ? String(body.id) : String(Date.now()),
+    zoneKey: body.zoneKey || 'infra',
+    zoneVi: body.zoneVi || 'Hạ tầng mạng',
+    zoneEn: body.zoneEn || 'Network Infrastructure',
+    ip: String(body.ip).trim(),
+    name: String(body.name).trim(),
+    mac: body.mac ? String(body.mac).trim() : '—',
+    os: body.os ? String(body.os).trim() : '—',
+    port: body.port ? String(body.port).trim() : '—',
+    webUrl: body.webUrl ? String(body.webUrl).trim() : '',
+    location: body.location ? String(body.location).trim() : '—',
+    status: body.status || 'Online',
+    notesVi: body.notesVi ? String(body.notesVi).trim() : '',
+    notesEn: body.notesEn ? String(body.notesEn).trim() : '',
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
+
+  list.push(newItem);
+  saveIpamData(list);
+
+  res.status(201).json({ ok: true, item: newItem });
+});
+
+// Chỉnh sửa mục IP logbook
+app.put('/api/ipam/:id', requireAuth, requireRole(['admin', 'operator']), (req, res) => {
+  const { id } = req.params;
+  const body = req.body || {};
+  const list = loadIpamData();
+  
+  const index = list.findIndex((item) => String(item.id) === String(id));
+  if (index === -1) {
+    return res.status(404).json({ error: 'Không tìm thấy mục IP cần chỉnh sửa' });
+  }
+
+  const existing = list[index];
+  const nowIso = new Date().toISOString();
+
+  const updatedItem = {
+    ...existing,
+    zoneKey: body.zoneKey !== undefined ? body.zoneKey : existing.zoneKey,
+    zoneVi: body.zoneVi !== undefined ? body.zoneVi : existing.zoneVi,
+    zoneEn: body.zoneEn !== undefined ? body.zoneEn : existing.zoneEn,
+    ip: body.ip !== undefined ? String(body.ip).trim() : existing.ip,
+    name: body.name !== undefined ? String(body.name).trim() : existing.name,
+    mac: body.mac !== undefined ? String(body.mac).trim() : existing.mac,
+    os: body.os !== undefined ? String(body.os).trim() : existing.os,
+    port: body.port !== undefined ? String(body.port).trim() : existing.port,
+    webUrl: body.webUrl !== undefined ? String(body.webUrl).trim() : existing.webUrl,
+    location: body.location !== undefined ? String(body.location).trim() : existing.location,
+    status: body.status !== undefined ? body.status : existing.status,
+    notesVi: body.notesVi !== undefined ? String(body.notesVi).trim() : existing.notesVi,
+    notesEn: body.notesEn !== undefined ? String(body.notesEn).trim() : existing.notesEn,
+    updatedAt: nowIso,
+  };
+
+  list[index] = updatedItem;
+  saveIpamData(list);
+
+  res.json({ ok: true, item: updatedItem });
+});
+
+// Xóa một mục IP logbook
+app.delete('/api/ipam/:id', requireAuth, requireRole(['admin', 'operator']), (req, res) => {
+  const { id } = req.params;
+  const list = loadIpamData();
+  
+  const index = list.findIndex((item) => String(item.id) === String(id));
+  if (index === -1) {
+    return res.status(404).json({ error: 'Không tìm thấy mục IP cần xóa' });
+  }
+
+  const deleted = list.splice(index, 1)[0];
+  saveIpamData(list);
+
+  res.json({ ok: true, item: deleted });
+});
+
+// Khôi phục danh sách IP logbook về dữ liệu gốc mặc định
+app.post('/api/ipam/reset-default', requireAuth, requireRole(['admin', 'operator']), (_req, res) => {
+  try {
+    let defaultList = [];
+    if (fs.existsSync(IPAM_DEFAULT_FILE)) {
+      const raw = fs.readFileSync(IPAM_DEFAULT_FILE, 'utf-8');
+      defaultList = JSON.parse(raw);
+    }
+    saveIpamData(defaultList);
+    res.json({ ok: true, data: defaultList });
+  } catch (err) {
+    res.status(500).json({ error: 'Không thể khôi phục dữ liệu mặc định: ' + err.message });
+  }
+});
+
+
+// ----------------------------------------------------------------------------
 // Serve frontend production (frontend/dist) nếu đã build
 // ----------------------------------------------------------------------------
-const DIST = path.resolve(process.cwd(), '..', 'frontend', 'dist');
+const DIST = path.resolve(__dirname, '..', 'frontend', 'dist');
 const HAS_BUILD = fs.existsSync(path.join(DIST, 'index.html'));
 if (HAS_BUILD) {
   app.use(express.static(DIST));
@@ -1428,7 +2236,13 @@ app.use((err, req, res, _next) => {
 app.listen(PORT, () => {
   console.log(`[backend] MikroTik Hotspot Proxy: http://localhost:${PORT}`);
   console.log(`[backend] Kết nối REST: ${REST_BASE} (user: ${MTIK_USER})`);
-  console.log(`[backend] Auth đăng nhập: Xác thực trực tiếp qua MikroTik RouterOS (/user)`);
+  const authSourceMode = (AUTH_SOURCE || 'routeros').toLowerCase().trim();
+  const authDesc = authSourceMode === 'env' 
+    ? 'Chỉ xác thực qua biến môi trường (.env)' 
+    : authSourceMode === 'both' 
+      ? 'Kết hợp file .env và RouterOS (/user)' 
+      : 'Xác thực trực tiếp qua MikroTik RouterOS (/user)';
+  console.log(`[backend] Auth đăng nhập: ${authSourceMode.toUpperCase()} (${authDesc})`);
   if (HAS_BUILD) {
     console.log(`[backend] Serve frontend production tại http://localhost:${PORT}`);
   }

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useApi } from '../hooks/useApi.js';
 import { useEventSource } from '../hooks/useEventSource.jsx';
+import { useLanguage } from '../context/LanguageContext.jsx';
 import StatCard from '../components/StatCard.jsx';
 import Spinner from '../components/Spinner.jsx';
 import { formatBytes, formatDuration } from '../utils/format.js';
@@ -10,6 +11,7 @@ import { formatBytes, formatDuration } from '../utils/format.js';
 const ACTIVE_REFRESH_MS = 15000;
 
 export default function DashboardPage() {
+  const { language, t } = useLanguage();
   const [sseStats, setSseStats] = useState(null);
   const active = useApi(api.active);
 
@@ -17,11 +19,11 @@ export default function DashboardPage() {
   const stats = useApi(api.stats);
 
   useEffect(() => {
-    const t = setInterval(() => {
+    const tTimer = setInterval(() => {
       active.reload();
       if (!sseStats) stats.reload();
     }, ACTIVE_REFRESH_MS);
-    return () => clearInterval(t);
+    return () => clearInterval(tTimer);
   }, [sseStats]);
 
   const s = sseStats || stats.data;
@@ -33,15 +35,15 @@ export default function DashboardPage() {
       {/* Topbar */}
       <div className="sk-topbar">
         <div>
-          <h1 className="sk-title">Tổng quan Hotspot</h1>
+          <h1 className="sk-title">{t('dashboard.title')}</h1>
           <p className="sk-subtitle font-mono">
-            Bảng điều khiển giám sát MikroTik Hotspot · Realtime SSE Streams
+            {t('dashboard.subtitle')}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <span className="sk-pill sk-pill--green">
             <span className="sk-pill__dot" />
-            SSE LIVE
+            {t('dashboard.sseLive')}
           </span>
           <button
             onClick={() => {
@@ -50,7 +52,7 @@ export default function DashboardPage() {
             }}
             className="btn btn-secondary btn-sm"
           >
-            ⟳ Làm mới
+            ⟳ {t('common.refresh')}
           </button>
         </div>
       </div>
@@ -60,7 +62,7 @@ export default function DashboardPage() {
         <div className="rounded-[var(--radius-lg)] border border-[rgba(245,185,69,0.3)] bg-[var(--amber-bg)] p-4 text-xs">
           <p className="flex items-center gap-2 font-semibold text-[var(--amber)]">
             <span className="inline-block h-2 w-2 rounded-full bg-[var(--amber)] shadow-[0_0_8px_var(--amber)]" />
-            Không lấy được dữ liệu hoàn chỉnh từ MikroTik REST API.
+            {t('performance.restErrorHint')}
           </p>
           <ul className="mt-2 list-inside list-disc text-[var(--text-dim)] space-y-0.5">
             {errors.map((e, i) => (
@@ -69,20 +71,20 @@ export default function DashboardPage() {
           </ul>
           <div className="mt-3 flex items-center gap-2">
             <button onClick={stats.reload} className="btn btn-primary btn-sm">
-              ⟳ Thử lại kết nối
+              ⟳ {t('common.retry')}
             </button>
           </div>
         </div>
       )}
 
       {waiting ? (
-        <Spinner label="Đang đồng bộ dữ liệu Hotspot từ RouterOS…" />
+        <Spinner label={t('common.loading')} />
       ) : s ? (
         <>
           {/* KPI Band */}
           <div className="sk-kpiband">
             <StatCard
-              label="Tổng người dùng"
+              label={t('dashboard.totalUsers')}
               value={s.users}
               icon={
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
@@ -95,7 +97,7 @@ export default function DashboardPage() {
               accent="accent"
             />
             <StatCard
-              label="Phiên đang chạy"
+              label={t('dashboard.activeSessions')}
               value={s.active}
               icon={
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
@@ -108,7 +110,7 @@ export default function DashboardPage() {
               accent="green"
             />
             <StatCard
-              label="Hồ sơ gói cước"
+              label={t('users.tabProfiles')}
               value={Array.isArray(s.profiles) ? s.profiles.length : '—'}
               icon={
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
@@ -140,14 +142,14 @@ export default function DashboardPage() {
             <div className="sk-card lg:col-span-5 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between border-b border-[var(--border-soft)] pb-3 mb-4">
-                  <h2 className="label-caps mb-0 text-xs">Phân bố người dùng theo Profile</h2>
+                  <h2 className="label-caps mb-0 text-xs">{t('dashboard.profileDistribution')}</h2>
                   <span className="sk-state sk-state--accent">
-                    {Object.keys(s.usersByProfile || {}).length} GÓI
+                    {Object.keys(s.usersByProfile || {}).length} PROFILES
                   </span>
                 </div>
 
                 {Object.keys(s.usersByProfile || {}).length === 0 ? (
-                  <p className="text-xs font-mono text-[var(--text-faint)] py-6 text-center">Chưa có dữ liệu phân bố.</p>
+                  <p className="text-xs font-mono text-[var(--text-faint)] py-6 text-center">{t('common.empty')}</p>
                 ) : (
                   <div className="space-y-3.5">
                     {Object.entries(s.usersByProfile).map(([profile, count]) => {
@@ -157,7 +159,7 @@ export default function DashboardPage() {
                         <div key={profile} className="space-y-1">
                           <div className="flex items-center justify-between text-xs">
                             <span className="font-mono font-semibold text-[var(--text)]">{profile}</span>
-                            <span className="font-mono text-[var(--text-dim)]">{count} user</span>
+                            <span className="font-mono text-[var(--text-dim)]">{count} users</span>
                           </div>
                           <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--surface-3)]">
                             <div
@@ -174,7 +176,7 @@ export default function DashboardPage() {
 
               <div className="mt-4 pt-3 border-t border-[var(--border-soft)] text-right">
                 <Link to="/profiles" className="text-xs font-mono text-[var(--accent-bright)] hover:underline">
-                  Quản lý tất cả hồ sơ →
+                  {t('dashboard.viewAllUsers')} →
                 </Link>
               </div>
             </div>
@@ -183,12 +185,12 @@ export default function DashboardPage() {
             <div className="sk-card lg:col-span-7 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between border-b border-[var(--border-soft)] pb-3 mb-4">
-                  <h2 className="label-caps mb-0 text-xs">Phiên hoạt động gần đây</h2>
+                  <h2 className="label-caps mb-0 text-xs">{t('dashboard.recentSessions')}</h2>
                   <Link
                     to="/sessions"
                     className="text-xs font-mono text-[var(--accent-bright)] hover:underline"
                   >
-                    Xem tất cả ({active.data?.length || 0}) →
+                    {t('dashboard.viewAllSessions')} ({active.data?.length || 0}) →
                   </Link>
                 </div>
 
@@ -198,17 +200,17 @@ export default function DashboardPage() {
                   <Spinner size="sm" />
                 ) : active.data?.length === 0 ? (
                   <p className="text-xs font-mono text-[var(--text-faint)] py-8 text-center">
-                    Không có phiên nào đang hoạt động lúc này.
+                    {t('dashboard.noActiveSessions')}
                   </p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="sk-dtable">
                       <thead>
                         <tr>
-                          <th>Người dùng</th>
-                          <th>Địa chỉ IP</th>
-                          <th>Thời gian</th>
-                          <th className="text-right">Dung lượng ↓ / ↑</th>
+                          <th>{t('users.colUser')}</th>
+                          <th>{t('sessions.colIp')}</th>
+                          <th>{t('sessions.colUptime')}</th>
+                          <th className="text-right">{t('sessions.colTraffic')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -217,7 +219,7 @@ export default function DashboardPage() {
                             <td className="font-semibold">{a.user}</td>
                             <td className="font-mono text-xs text-[var(--text-dim)]">{a.ip}</td>
                             <td className="font-mono text-xs text-[var(--text-faint)]">
-                              {formatDuration(a.uptime)}
+                              {formatDuration(a.uptime, language)}
                             </td>
                             <td className="text-right font-mono text-xs">
                               <span className="text-[var(--cyan)]">{formatBytes(a['bytes-in'])}</span> ↓ /{' '}

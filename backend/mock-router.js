@@ -303,6 +303,7 @@ const mockDhcpLeases = [
     'last-seen': '2s',
     'expires-after': '23h50m',
     dynamic: 'true',
+    comment: '[VIP, Mobile] iPhone Giám Đốc',
   }),
   mk({
     address: '192.168.88.22',
@@ -313,6 +314,7 @@ const mockDhcpLeases = [
     'last-seen': '10s',
     'expires-after': '20h15m',
     dynamic: 'true',
+    comment: '[Văn phòng, Laptop] Máy kế toán',
   }),
   mk({
     address: '192.168.88.199',
@@ -323,6 +325,7 @@ const mockDhcpLeases = [
     'last-seen': '1s',
     'expires-after': '23h59m',
     dynamic: 'true',
+    comment: '[Khách] Điện thoại khách VIP',
   }),
   mk({
     address: '192.168.88.50',
@@ -333,6 +336,7 @@ const mockDhcpLeases = [
     'last-seen': '5s',
     'expires-after': '22h10m',
     dynamic: 'true',
+    comment: '[Phòng khách, TV] Smart TV 65 inch',
   }),
   mk({
     address: '192.168.88.100',
@@ -343,7 +347,29 @@ const mockDhcpLeases = [
     'last-seen': '3s',
     'expires-after': '23h12m',
     dynamic: 'false',
-    comment: 'Camera IP Cố định',
+    comment: '[Camera, Sân Vườn] Camera IP Cố định',
+  }),
+  mk({
+    address: '192.168.88.200',
+    'mac-address': '68:D7:9A:33:22:11',
+    'host-name': 'Synology-NAS-DS920',
+    server: 'dhcp1',
+    status: 'bound',
+    'last-seen': '1s',
+    'expires-after': 'never',
+    dynamic: 'false',
+    comment: '[Server, Tầng 1] Máy chủ lưu trữ NAS',
+  }),
+  mk({
+    address: '192.168.88.210',
+    'mac-address': '70:85:C2:55:66:77',
+    'host-name': 'HP-LaserJet-Pro',
+    server: 'dhcp1',
+    status: 'bound',
+    'last-seen': '4s',
+    'expires-after': 'never',
+    dynamic: 'false',
+    comment: '[Máy in, Văn phòng] Máy in hóa đơn mạng LAN',
   }),
 ];
 
@@ -355,7 +381,107 @@ app.delete('/rest/ip/hotspot/host/:id', (req, res) => {
   res.status(200).json({});
 });
 
+const mockDhcpServers = [
+  mk({ name: 'dhcp1', interface: 'bridge', 'lease-time': '1d', 'address-pool': 'dhcp_pool1' }),
+  mk({ name: 'hotspot-dhcp', interface: 'wlan1', 'lease-time': '12h', 'address-pool': 'hs_pool' }),
+];
+
+app.get('/rest/ip/dhcp-server', (req, res) => res.json(mockDhcpServers));
+
 app.get('/rest/ip/dhcp-server/lease', (req, res) => res.json(mockDhcpLeases));
+
+app.post('/rest/ip/dhcp-server/lease', (req, res) => {
+  const body = req.body || {};
+  if (!body.address || !body['mac-address']) {
+    return res.status(400).json({ error: 'Missing address or mac-address' });
+  }
+  const created = mk({
+    address: body.address,
+    'mac-address': body['mac-address'].toUpperCase(),
+    'host-name': body['host-name'] || '',
+    server: body.server || 'all',
+    status: 'bound',
+    'last-seen': '0s',
+    'expires-after': 'never',
+    dynamic: 'false',
+    comment: body.comment || '',
+    disabled: body.disabled === 'true' || body.disabled === true ? 'true' : 'false',
+  });
+  mockDhcpLeases.push(created);
+  res.status(201).json(created);
+});
+
+app.put('/rest/ip/dhcp-server/lease', (req, res) => {
+  const body = req.body || {};
+  if (!body.address || !body['mac-address']) {
+    return res.status(400).json({ error: 'Missing address or mac-address' });
+  }
+  const created = mk({
+    address: body.address,
+    'mac-address': body['mac-address'].toUpperCase(),
+    'host-name': body['host-name'] || '',
+    server: body.server || 'all',
+    status: 'bound',
+    'last-seen': '0s',
+    'expires-after': 'never',
+    dynamic: 'false',
+    comment: body.comment || '',
+    disabled: body.disabled === 'true' || body.disabled === true ? 'true' : 'false',
+  });
+  mockDhcpLeases.push(created);
+  res.status(201).json(created);
+});
+
+function patchDhcpLease(req, res) {
+  const lease = mockDhcpLeases.find((l) => l['.id'] === req.params.id || l['mac-address'] === req.params.id);
+  if (!lease) return res.status(404).json({ error: 'Lease not found' });
+  const { '.id': _drop, ...patch } = req.body || {};
+  if (patch['mac-address']) patch['mac-address'] = String(patch['mac-address']).toUpperCase();
+  if (patch.address || patch.dynamic === 'false' || patch.dynamic === false) {
+    lease.dynamic = 'false';
+    lease['expires-after'] = 'never';
+  }
+  Object.assign(lease, patch);
+  res.json(lease);
+}
+
+app.patch('/rest/ip/dhcp-server/lease/:id', patchDhcpLease);
+app.put('/rest/ip/dhcp-server/lease/:id', patchDhcpLease);
+
+app.post('/rest/ip/dhcp-server/lease/:id/make-static', (req, res) => {
+  const lease = mockDhcpLeases.find((l) => l['.id'] === req.params.id || l['mac-address'] === req.params.id);
+  if (!lease) return res.status(404).json({ error: 'Lease not found' });
+  lease.dynamic = 'false';
+  lease['expires-after'] = 'never';
+  if (req.body?.comment !== undefined) {
+    lease.comment = req.body.comment;
+  }
+  res.json(lease);
+});
+
+app.post('/rest/ip/dhcp-server/lease/:id/make-dynamic', (req, res) => {
+  const lease = mockDhcpLeases.find((l) => l['.id'] === req.params.id || l['mac-address'] === req.params.id);
+  if (!lease) return res.status(404).json({ error: 'Lease not found' });
+  lease.dynamic = 'true';
+  lease['expires-after'] = '23h59m';
+  res.json(lease);
+});
+
+app.post('/rest/ip/dhcp-server/lease/make-static', (req, res) => {
+  const id = req.body?.numbers || req.body?.id || req.body?.['.id'];
+  const lease = mockDhcpLeases.find((l) => l['.id'] === id || l['mac-address'] === id);
+  if (!lease) return res.status(404).json({ error: 'Lease not found' });
+  lease.dynamic = 'false';
+  lease['expires-after'] = 'never';
+  res.json(lease);
+});
+
+app.delete('/rest/ip/dhcp-server/lease/:id', (req, res) => {
+  const i = mockDhcpLeases.findIndex((l) => l['.id'] === req.params.id || l['mac-address'] === req.params.id);
+  if (i === -1) return res.status(404).json({ error: 'Lease not found' });
+  mockDhcpLeases.splice(i, 1);
+  res.status(200).json({});
+});
 
 // ----------------------------------------------------------------------------
 // System Users (/user) - tài khoản quản trị MikroTik RouterOS

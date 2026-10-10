@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
+import { useLanguage } from '../context/LanguageContext.jsx';
 
 const CHECK_INTERVAL = 10000; // kiểm tra lại mỗi 10s
 
 export default function ConnectionStatus() {
+  const { t } = useLanguage();
   const [status, setStatus] = useState('checking'); // checking | connected | offline
   const [host, setHost] = useState(null);
   const [latencyMs, setLatencyMs] = useState(null);
@@ -30,10 +32,10 @@ export default function ConnectionStatus() {
     }
 
     check();
-    const t = setInterval(check, CHECK_INTERVAL);
+    const tTimer = setInterval(check, CHECK_INTERVAL);
     return () => {
       cancelled = true;
-      clearInterval(t);
+      clearInterval(tTimer);
     };
   }, []);
 
@@ -41,7 +43,7 @@ export default function ConnectionStatus() {
     return (
       <div className="flex items-center gap-2 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] px-3 py-2">
         <span className="h-2 w-2 rounded-full bg-[var(--text-ghost)] animate-pulse" />
-        <span className="text-xs font-mono text-[var(--text-faint)]">Đang kiểm tra kết nối…</span>
+        <span className="text-xs font-mono text-[var(--text-faint)]">{t('conn.checking')}</span>
       </div>
     );
   }
@@ -52,7 +54,7 @@ export default function ConnectionStatus() {
         <span className="h-2 w-2 rounded-full bg-[var(--green)] shadow-[0_0_8px_var(--green)]" />
         <div className="min-w-0">
           <div className="text-xs font-medium text-[var(--green)]">
-            REST API Connected
+            {t('conn.connected')}
           </div>
           {host && (
             <div className="truncate text-[11px] font-mono text-[var(--text-dim)]">
@@ -69,9 +71,9 @@ export default function ConnectionStatus() {
     <div className="flex items-center gap-2.5 rounded-lg bg-[var(--red-bg)] border border-[rgba(251,111,111,0.25)] px-3 py-2">
       <span className="h-2 w-2 rounded-full bg-[var(--red)] shadow-[0_0_8px_var(--red)]" />
       <div className="min-w-0">
-        <div className="text-xs font-medium text-[var(--red)]">Mất kết nối Router</div>
+        <div className="text-xs font-medium text-[var(--red)]">{t('conn.disconnected')}</div>
         <div className="truncate text-[10px] font-mono text-[var(--text-faint)]">
-          {error || 'Không thể kết nối REST'}
+          {error || t('conn.cannotConnectRest')}
         </div>
       </div>
     </div>
