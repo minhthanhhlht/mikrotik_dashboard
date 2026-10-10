@@ -1491,7 +1491,7 @@ curl -u admin:matkhau http://192.168.88.1/rest/ip/hotspot/user
 
 ---
 
-### Phiên 76: Tối Ưu Hóa Hiệu Năng HassOS & Sửa Lỗi Tải Chậm Khi Điều Hướng (Zero-Lag Navigation)
+### Phiên 76 (2026-10-04) — Tối Ưu Hóa Hiệu Năng HassOS & Sửa Lỗi Tải Chậm Khi Điều Hướng (Zero-Lag Navigation)
 
 1. **Khắc phục nghẽn Socket & Loop Treo Backend**:
    - **Hiện tượng**: Khi vào `/hass` với Home Assistant IP thật không phản hồi (`192.168.20.20:8123` unreachable), SSE endpoint `/api/hass/events` chạy `setInterval(1500ms)` với timeout mặc định 6000ms gây chồng chéo hàng chục HTTP request treo, làm tắc nghẽn hoàn toàn Node.js Event Loop và Socket Connection Pool.
@@ -1513,28 +1513,27 @@ curl -u admin:matkhau http://192.168.88.1/rest/ip/hotspot/user
 
 ---
 
-### Phiên 77: Khắc Phục Giám Sát Proxmox Trên Coolify & Bổ Sung Bộ Chuyển Đổi Chế Độ Mock / Real-time Home Assistant
+### Phiên 77 (2026-10-10) — Khắc Phục Giám Sát Proxmox Trên Coolify & Bổ Sung Bộ Chuyển Đổi Chế Độ Mock / Real-time Home Assistant
 
-1. **Khắc Phục Giám Sát Proxmox VE**:
-   - **Xác thực biến môi trường trên Coolify**: Đã bổ sung toàn bộ biến môi trường Proxmox (`PROXMOX_HOST`, `PROXMOX_PORT`, `PROXMOX_SCHEME`, `PROXMOX_TOKEN_ID`, `PROXMOX_TOKEN_SECRET`, `PROXMOX_IGNORE_SSL`) và Home Assistant (`HASS_URL`, `HASS_TOKEN`) vào ứng dụng trên Coolify thông qua Coolify API.
+1. **Khắc Phục Giám Sát Proxmox VE Trực Tiếp Trên Coolify**:
+   - **Tự động đồng bộ biến môi trường lên Coolify qua API**: Đã cấu hình toàn bộ biến môi trường Proxmox (`PROXMOX_HOST`, `PROXMOX_PORT`, `PROXMOX_SCHEME`, `PROXMOX_TOKEN_ID`, `PROXMOX_TOKEN_SECRET`, `PROXMOX_IGNORE_SSL`) và Home Assistant (`HASS_URL`, `HASS_TOKEN`) vào ứng dụng trên Coolify thông qua Coolify API.
    - **Cơ chế Circuit Breaker & Timeout Proxmox**: Bổ sung `PVE_COOLDOWN_MS = 15000` và giảm timeout trong `backend/proxmox-client.js` xuống 3.5s (`AbortSignal.timeout(3500)`) để chống nghẽn socket khi Proxmox ngoại tuyến.
    - **Xác thực SSE qua Query Token**: Cập nhật `requireAuth` trong `backend/server.js` để hỗ trợ nhận diện token đăng nhập từ `req.query.token` / `req.query.auth_token` cho các luồng `EventSource('/api/proxmox/events')` và `EventSource('/api/hass/events')`.
 
-2. **Bổ Sung Tùy Chọn Chuyển Đổi Mock / Real-Time Home Assistant**:
+2. **Bổ Sung Tùy Chọn Chuyển Đổi Mock / Real-Time Home Assistant & Proxmox**:
    - **Backend API**:
-     - `GET /api/hass/config`: Trả về chế độ hiện tại (`auto` | `real` | `mock`), trạng thái cấu hình và URL.
-     - `POST /api/hass/mode`: Cho phép thay đổi linh hoạt chế độ kết nối Home Assistant.
-     - `fetchHassData()`: Tuân thủ chế độ được chọn (ép buộc Mock khi chọn Mock; kết nối HA thật khi chọn Real-time; và tự động fallback khi chọn Auto).
+     - `GET /api/hass/config` & `POST /api/hass/mode`: Cho phép xem và thay đổi linh hoạt chế độ kết nối Home Assistant (`auto` | `real` | `mock`).
+     - `GET /api/proxmox/config` & `POST /api/proxmox/mode`: Cho phép xem và thay đổi linh hoạt chế độ kết nối Proxmox VE (`auto` | `real` | `mock`).
+     - `fetchHassData()` & `fetchProxmox()`: Tuân thủ chế độ được chọn (ép buộc Mock khi chọn Mock; kết nối thiết bị thật khi chọn Real-time; và tự động fallback khi chọn Auto).
    - **Frontend UI**:
-     - Thêm bộ điều khiển chuyển đổi chế độ (.sk-seg) trực quan trên TopBar trang **Home Assistant OS (`/hass`)** với 3 chế độ: 🔄 **Auto** | ⚡ **Real-time** | 🧪 **Mock Demo**.
-     - Tích hợp lưu trữ lựa chọn vào `localStorage ('hass_mode')` và đồng bộ với Smart Home Dashboard (`ha_dashboard/lib/env.ts`).
+     - Thêm bộ điều khiển chuyển đổi chế độ (.sk-seg) trực quan trên TopBar trang **Home Assistant OS (`/hass`)** và trang **Proxmox VE (`/proxmox`)** với 3 chế độ: 🔄 **Auto** | ⚡ **Real-time** | 🧪 **Mock Demo**.
+     - Tích hợp lưu trữ lựa chọn vào `localStorage ('hass_mode', 'proxmox_mode')` và đồng bộ với Smart Home Dashboard (`ha_dashboard/lib/env.ts`).
 
-3. **Bổ Sung Chế Độ Chuyển Đổi Tương Tự Cho Proxmox VE**:
-   - Thêm `GET /api/proxmox/config` & `POST /api/proxmox/mode`.
-   - Thêm bộ chuyển đổi chế độ trên TopBar trang **Giám sát Proxmox VE (`/proxmox`)** (🔄 **Auto** | ⚡ **Real-time** | 🧪 **Mock Demo**).
-
-4. **Kiểm Thử & Build**:
-   - `npm --prefix frontend run build` 100% thành công (86 modules, 502ms, 0 errors).
+3. **Deploy Tự Động & Kiểm Thử Trực Tiếp Trên Coolify (`https://dashboard.mtdd.io.vn/`)**:
+   - Push mã nguồn lên GitHub `minhthanhhlht/mikrotik_dashboard` và kích hoạt deploy qua Coolify API (`POST /api/v1/deploy`).
+   - Sử dụng **Chrome DevTools MCP** kiểm thử trực tiếp trên live site:
+     - Trang **Proxmox VE (`/proxmox`)**: Kết nối thành công tới Node `mtdd` thật (`192.168.20.21:8006`), hiển thị đầy đủ telemetry CPU 1.3%, RAM 18.7%, ZFS 6.9%, Live Traffic RX/TX, và danh sách Container LXC thực tế (container ID 100 `ollama-server` 18 Cores, 8GB RAM).
+     - Trang **Home Assistant (`/hass`)**: Kết nối thành công `REAL HOST` và nút chuyển chế độ `[🔄 Auto] [⚡ Real-time] [🧪 Mock Demo]` hoạt động mượt mà, chuyển đổi trạng thái tức thì.
 
 ---
 
