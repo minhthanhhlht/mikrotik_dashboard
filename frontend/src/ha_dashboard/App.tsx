@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { api } from '../api/client.js'
 import { useHomeAssistant } from './hooks/useHomeAssistant'
 import { useDashboardStorage } from './hooks/useDashboardStorage'
 import { INITIAL_DASHBOARD_CONFIG } from './lib/defaultConfig'
@@ -16,6 +17,11 @@ import ViewConfigModal from './components/editor/ViewConfigModal'
 import RawConfigModal from './components/editor/RawConfigModal'
 
 function App() {
+  const [currentMode, setCurrentMode] = useState<'auto' | 'real' | 'mock'>(() => {
+    const saved = localStorage.getItem('hass_mode')
+    return (saved === 'real' || saved === 'mock' || saved === 'auto') ? saved : 'auto'
+  })
+
   const {
     connectionState,
     states,
@@ -39,6 +45,19 @@ function App() {
     saveRawConfig,
     saveSourceFile,
   } = useDashboardStorage()
+
+  const handleSwitchMode = async (newMode: 'auto' | 'real' | 'mock') => {
+    if (newMode === currentMode) return
+    setCurrentMode(newMode)
+    localStorage.setItem('hass_mode', newMode)
+    try {
+      await api.setHassMode(newMode)
+    } catch {
+      /* ignore */
+    }
+    // Kết nối lại theo chế độ mới (real websocket hoặc mock states)
+    await connectFromEnv()
+  }
 
   // Tự động kết nối tới Home Assistant khi khởi chạy (không cần đăng nhập riêng)
   useEffect(() => {
@@ -317,8 +336,10 @@ function App() {
           connectionState={connectionState}
           connectionLabel={connectionMeta.label}
           connectionDetail={haConfig?.host || undefined}
+          currentMode={currentMode}
           theme={theme}
           isEditMode={isEditMode}
+          onSwitchMode={handleSwitchMode}
           onToggleEditMode={toggleEditMode}
           onToggleTheme={toggleTheme}
           onOpenConnect={() => setView('settings')}

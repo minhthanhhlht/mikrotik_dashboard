@@ -5,8 +5,10 @@ interface TopBarProps {
   connectionState: string
   connectionLabel: string
   connectionDetail?: string
+  currentMode?: 'auto' | 'real' | 'mock'
   theme: 'dark' | 'light'
   isEditMode?: boolean
+  onSwitchMode?: (mode: 'auto' | 'real' | 'mock') => void
   onToggleTheme: () => void
   onToggleEditMode?: () => void
   onOpenConnect: () => void
@@ -74,8 +76,10 @@ export default function TopBar({
   connectionState,
   connectionLabel,
   connectionDetail,
+  currentMode = 'auto',
   theme,
   isEditMode = false,
+  onSwitchMode,
   onToggleTheme,
   onToggleEditMode,
   onOpenConnect,
@@ -151,8 +155,40 @@ export default function TopBar({
         </div>
       </div>
 
-      {/* Right: Connection status pill + Host Mono chip + Edit Toggle + Theme Toggle + Config action + Logout */}
+      {/* Right: Mode Switcher + Connection status pill + Host Mono chip + Edit Toggle + Theme Toggle + Config action + Logout */}
       <div className="flex items-center gap-2 sm:gap-2.5">
+        {/* Mode Switcher */}
+        {onSwitchMode && (
+          <div className="hidden sm:flex items-center gap-1 bg-[var(--surface-sunken)] p-0.5 rounded-[var(--radius-sm)] border border-[var(--border)]">
+            <span className="text-[10px] font-mono text-[var(--text-dim)] px-1 uppercase font-medium">Chế độ:</span>
+            <div className="sk-seg">
+              <button
+                type="button"
+                onClick={() => onSwitchMode('auto')}
+                className={`sk-seg__btn text-xs py-0.5 px-2 font-mono ${currentMode === 'auto' ? 'is-on' : ''}`}
+                title="Tự động: Ưu tiên HA thật, tự chuyển Demo khi ngoại tuyến"
+              >
+                🔄 Auto
+              </button>
+              <button
+                type="button"
+                onClick={() => onSwitchMode('real')}
+                className={`sk-seg__btn text-xs py-0.5 px-2 font-mono ${currentMode === 'real' ? 'is-on' : ''}`}
+                title="Real-time: Kết nối trực tiếp Home Assistant thật"
+              >
+                ⚡ Real-time
+              </button>
+              <button
+                type="button"
+                onClick={() => onSwitchMode('mock')}
+                className={`sk-seg__btn text-xs py-0.5 px-2 font-mono ${currentMode === 'mock' ? 'is-on' : ''}`}
+                title="Mock Demo: Chạy dữ liệu giả lập mô phỏng"
+              >
+                🧪 Mock
+              </button>
+            </div>
+          </div>
+        )}
         {connectionDetail && (
           <span
             style={{ color: 'var(--text-dim)' }}
