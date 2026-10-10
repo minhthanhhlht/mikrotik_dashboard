@@ -125,6 +125,9 @@ async function getAuthHeader(cfg) {
   };
 }
 
+let lastPveFailureTime = 0;
+const PVE_COOLDOWN_MS = 15000;
+
 /**
  * Helper gọi REST API Proxmox VE
  */
@@ -134,11 +137,23 @@ async function pveFetch(endpoint, options = {}) {
     throw new Error('Chưa cấu hình PROXMOX_HOST trong file .env');
   }
 
+  const now = Date.now();
+  if (now - lastPveFailureTime < PVE_COOLDOWN_MS) {
+    throw new Error('Proxmox VE hiện đang ngoại tuyến (cooldown)');
+  }
+
   if (cfg.ignoreSsl) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
   }
 
-  const authHeaders = await getAuthHeader(cfg);
+  let authHeaders;
+  try {
+    authHeaders = await getAuthHeader(cfg);
+  } catch (err) {
+    lastPveFailureTime = Date.now();
+    throw err;
+  }
+
   const baseUrl = `${cfg.scheme}://${cfg.host}:${cfg.port}/api2/json`;
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = `${baseUrl}${cleanEndpoint}`;
@@ -148,32 +163,38 @@ async function pveFetch(endpoint, options = {}) {
     delete customHeaders['Content-Type'];
   }
 
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      ...authHeaders,
-      Accept: 'application/json',
-      ...customHeaders,
-    },
-    signal: AbortSignal.timeout(options.timeout || 10000),
-  });
-
-  const text = await res.text();
-  let json = null;
   try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = text;
-  }
+    const res = await fetch(url, {
+      ...options,
+      headers: {
+        ...authHeaders,
+        Accept: 'application/json',
+        ...customHeaders,
+      },
+      signal: AbortSignal.timeout(options.timeout || 3500),
+    });
 
-  if (!res.ok) {
-    const errMsg = json?.errors || json?.data || json?.message || `Proxmox HTTP ${res.status}`;
-    const err = new Error(typeof errMsg === 'object' ? JSON.stringify(errMsg) : String(errMsg));
-    err.status = res.status;
+    const text = await res.text();
+    let json = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = text;
+    }
+
+    if (!res.ok) {
+      const errMsg = json?.errors || json?.data || json?.message || `Proxmox HTTP ${res.status}`;
+      const err = new Error(typeof errMsg === 'object' ? JSON.stringify(errMsg) : String(errMsg));
+      err.status = res.status;
+      throw err;
+    }
+
+    lastPveFailureTime = 0;
+    return json?.data !== undefined ? json.data : json;
+  } catch (err) {
+    lastPveFailureTime = Date.now();
     throw err;
   }
-
-  return json?.data !== undefined ? json.data : json;
 }
 
 /**

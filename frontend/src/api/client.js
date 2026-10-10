@@ -179,8 +179,14 @@ export const api = {
   deleteProxmoxLxc: (vmid, purge = 1) =>
     request(`/proxmox/lxcs/${encodeURIComponent(vmid)}?purge=${purge ? 1 : 0}`, { method: 'DELETE' }),
 
+  // Proxmox Mode & Config
+  proxmoxConfig: () => request('/proxmox/config'),
+  setProxmoxMode: (mode) => request('/proxmox/mode', { method: 'POST', body: { mode } }),
+
   // Home Assistant OS (HassOS) Performance, Add-ons & Core
   hassSummary: () => request('/hass/summary'),
+  hassConfig: () => request('/hass/config'),
+  setHassMode: (mode) => request('/hass/mode', { method: 'POST', body: { mode } }),
   hassAddonAction: (slug, action) =>
     request(`/hass/addons/${encodeURIComponent(slug)}/action`, {
       method: 'POST',

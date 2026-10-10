@@ -247,7 +247,7 @@ loadSessions();
 // Auth & RBAC middleware (Xác thực qua Session Token 3 ngày cấp từ MikroTik)
 // ----------------------------------------------------------------------------
 function requireAuth(req, res, next) {
-  const h = req.headers['x-auth-token'];
+  const h = req.headers['x-auth-token'] || req.query.token || req.query.auth_token;
   if (!h) {
     return res.status(401).json({ error: 'Chưa đăng nhập hoặc phiên đã hết hạn.' });
   }
@@ -1617,15 +1617,39 @@ app.delete('/api/router/backups/:id', requireRole(['admin']), async (req, res) =
 // PROXMOX VE HYPERVISOR PERFORMANCE & MONITORING API (REAL & MOCK)
 // ----------------------------------------------------------------------------
 
+let currentProxmoxMode = 'auto'; // 'auto' | 'real' | 'mock'
+
+// API cấu hình & chế độ Proxmox VE
+app.get('/api/proxmox/config', (_req, res) => {
+  res.json({
+    ok: true,
+    mode: currentProxmoxMode,
+    configured: isProxmoxConfigured(),
+    host: process.env.PROXMOX_HOST || '',
+  });
+});
+
+app.post('/api/proxmox/mode', requireAuth, (req, res) => {
+  const { mode = 'auto' } = req.body || {};
+  currentProxmoxMode = ['real', 'mock', 'auto'].includes(mode) ? mode : 'auto';
+  res.json({ ok: true, mode: currentProxmoxMode });
+});
+
 // Lấy tóm tắt hiệu năng Proxmox VE (Real hoặc Mock fallback)
 app.get('/api/proxmox/summary', async (req, res) => {
   try {
-    if (isProxmoxConfigured()) {
+    if (currentProxmoxMode !== 'mock' && isProxmoxConfigured()) {
       try {
         const realData = await getRealProxmoxSummary();
         return res.json(realData);
       } catch (err) {
         console.warn('[proxmox] Không thể kết nối Proxmox VE thật, chuyển sang Mock:', err.message);
+        if (currentProxmoxMode === 'real') {
+          const mock = getMockProxmoxSummary();
+          mock.realError = err.message;
+          mock.isFallback = true;
+          return res.json(mock);
+        }
       }
     }
 
@@ -1647,7 +1671,7 @@ app.get('/api/proxmox/events', async (req, res) => {
   });
 
   async function fetchProxmox() {
-    if (isProxmoxConfigured()) {
+    if (currentProxmoxMode !== 'mock' && isProxmoxConfigured()) {
       try {
         return await getRealProxmoxSummary();
       } catch (err) {
@@ -1943,6 +1967,26 @@ app.delete('/api/proxmox/lxcs/:vmid', requireAuth, requireRole(['admin']), async
 // Giám sát Home Assistant OS (HassOS) - Hỗ trợ Real REST/Supervisor API & Mock
 // ============================================================================
 
+let currentHassMode = 'auto'; // 'auto' | 'real' | 'mock'
+
+// API cấu hình & chế độ Home Assistant OS
+app.get('/api/hass/config', (_req, res) => {
+  res.json({
+    ok: true,
+    mode: currentHassMode,
+    configured: isHassConfigured(),
+    url: process.env.HASS_URL || 'http://192.168.20.20:8123',
+  });
+});
+
+app.post('/api/hass/mode', requireAuth, (req, res) => {
+  const { mode = 'auto' } = req.body || {};
+  currentHassMode = ['real', 'mock', 'auto'].includes(mode) ? mode : 'auto';
+  cachedHassData = null;
+  lastHassFetchTime = 0;
+  res.json({ ok: true, mode: currentHassMode });
+});
+
 // Helper lấy dữ liệu Hass (Real hoặc Mock fallback) với bộ nhớ đệm ngắn 1500ms
 let cachedHassData = null;
 let lastHassFetchTime = 0;
@@ -1960,6 +2004,15 @@ async function fetchHassData() {
 
   hassFetchPromise = (async () => {
     try {
+      // 1. Chế độ Mock cưỡng bức
+      if (currentHassMode === 'mock') {
+        const mock = getMockHassSummary();
+        cachedHassData = mock;
+        lastHassFetchTime = Date.now();
+        return mock;
+      }
+
+      // 2. Chế độ Real hoặc Auto
       if (isHassConfigured()) {
         try {
           const real = await getRealHassSummary();
@@ -1968,6 +2021,14 @@ async function fetchHassData() {
           return real;
         } catch (err) {
           console.warn('[HassOS] Không thể lấy dữ liệu từ HassOS thật, chuyển Mock:', err.message);
+          if (currentHassMode === 'real') {
+            const fallbackMock = getMockHassSummary();
+            fallbackMock.realError = err.message;
+            fallbackMock.isFallback = true;
+            cachedHassData = fallbackMock;
+            lastHassFetchTime = Date.now();
+            return fallbackMock;
+          }
         }
       }
       const mock = getMockHassSummary();

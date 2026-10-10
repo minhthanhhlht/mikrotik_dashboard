@@ -60,14 +60,24 @@ export default function ProxmoxPerformancePage() {
   const [netRxHistory, setNetRxHistory] = useState(() => createEmptyBuffer());
   const [netTxHistory, setNetTxHistory] = useState(() => createEmptyBuffer());
 
+  const [proxmoxMode, setProxmoxMode] = useState(() => localStorage.getItem('proxmox_mode') || 'auto');
+  const [switchingMode, setSwitchingMode] = useState(false);
+
   const eventSourceRef = useRef(null);
 
   async function loadInitial() {
     setLoading(true);
     setError('');
     try {
-      const res = await api.proxmoxSummary();
+      const [res, cfg] = await Promise.all([
+        api.proxmoxSummary(),
+        api.proxmoxConfig().catch(() => null),
+      ]);
       setData(res);
+      if (cfg?.mode) {
+        setProxmoxMode(cfg.mode);
+        localStorage.setItem('proxmox_mode', cfg.mode);
+      }
       setLastUpdate(new Date());
       const cpuVal = res?.node?.cpuPercentage ?? 0;
       const memVal = res?.node?.memory?.percentage ?? 0;
@@ -84,13 +94,38 @@ export default function ProxmoxPerformancePage() {
     }
   }
 
+  async function handleSwitchMode(newMode) {
+    if (switchingMode || newMode === proxmoxMode) return;
+    setSwitchingMode(true);
+    try {
+      await api.setProxmoxMode(newMode);
+      setProxmoxMode(newMode);
+      localStorage.setItem('proxmox_mode', newMode);
+      toast.success(
+        newMode === 'real'
+          ? 'Đã bật chế độ: Proxmox VE Trực Tiếp (Real-time)'
+          : newMode === 'mock'
+          ? 'Đã bật chế độ: Giả Lập Mô Phỏng (Mock Demo)'
+          : 'Đã bật chế độ: Tự Động Kết Nối (Auto Fallback)',
+        t('common.success')
+      );
+      await loadInitial();
+    } catch (err) {
+      toast.error(err.message || 'Lỗi chuyển đổi chế độ Proxmox', t('common.error'));
+    } finally {
+      setSwitchingMode(false);
+    }
+  }
+
   useEffect(() => {
     let es;
     let fallbackTimer;
 
     function connectSSE() {
       try {
-        es = new EventSource('/api/proxmox/events');
+        const token = localStorage.getItem('hs_token') || '';
+        const sseUrl = token ? `/api/proxmox/events?token=${encodeURIComponent(token)}` : '/api/proxmox/events';
+        es = new EventSource(sseUrl);
         eventSourceRef.current = es;
 
         es.onmessage = (event) => {
@@ -320,6 +355,40 @@ export default function ProxmoxPerformancePage() {
 
         {/* Thanh điều khiển Live Stream, Tần suất & Nguồn Máy chủ Node */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Mode Switcher */}
+          <div className="flex items-center gap-1.5 bg-[var(--surface-sunken)] p-1 rounded-[var(--radius-sm)] border border-[var(--border)]">
+            <span className="text-[10.5px] font-mono text-[var(--text-dim)] px-1.5 uppercase font-medium">Chế độ:</span>
+            <div className="sk-seg">
+              <button
+                type="button"
+                onClick={() => handleSwitchMode('auto')}
+                disabled={switchingMode}
+                className={`sk-seg__btn text-xs py-0.5 px-2 font-mono ${proxmoxMode === 'auto' ? 'is-on' : ''}`}
+                title="Tự động: Ưu tiên Proxmox thật, tự chuyển Mock khi ngoại tuyến"
+              >
+                🔄 Auto
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSwitchMode('real')}
+                disabled={switchingMode}
+                className={`sk-seg__btn text-xs py-0.5 px-2 font-mono ${proxmoxMode === 'real' ? 'is-on' : ''}`}
+                title="Real-time: Kết nối trực tiếp Proxmox VE thật"
+              >
+                ⚡ Real-time
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSwitchMode('mock')}
+                disabled={switchingMode}
+                className={`sk-seg__btn text-xs py-0.5 px-2 font-mono ${proxmoxMode === 'mock' ? 'is-on' : ''}`}
+                title="Mock Demo: Chạy dữ liệu giả lập mô phỏng"
+              >
+                🧪 Mock Demo
+              </button>
+            </div>
+          </div>
+
           {/* Nút nguồn Máy chủ vật lý Proxmox Host */}
           <div className="flex items-center gap-1 bg-[var(--surface-2)] p-0.5 rounded-[var(--radius-sm)] border border-[var(--border-soft)]">
             <button

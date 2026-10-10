@@ -52,19 +52,52 @@ export default function HassPerformancePage() {
   const [netRxHistory, setNetRxHistory] = useState(() => createEmptyBuffer());
   const [netTxHistory, setNetTxHistory] = useState(() => createEmptyBuffer());
 
+  const [hassMode, setHassMode] = useState(() => localStorage.getItem('hass_mode') || 'auto');
+  const [switchingMode, setSwitchingMode] = useState(false);
+
   const eventSourceRef = useRef(null);
 
   async function loadInitial() {
     setLoading(true);
     setError('');
     try {
-      const res = await api.hassSummary();
+      const [res, cfg] = await Promise.all([
+        api.hassSummary(),
+        api.hassConfig().catch(() => null),
+      ]);
       setData(res);
+      if (cfg?.mode) {
+        setHassMode(cfg.mode);
+        localStorage.setItem('hass_mode', cfg.mode);
+      }
       setLastUpdate(new Date());
     } catch (err) {
       setError(err.message || 'Could not connect to Home Assistant OS API.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleSwitchMode(newMode) {
+    if (switchingMode || newMode === hassMode) return;
+    setSwitchingMode(true);
+    try {
+      await api.setHassMode(newMode);
+      setHassMode(newMode);
+      localStorage.setItem('hass_mode', newMode);
+      toast.success(
+        newMode === 'real'
+          ? 'Đã bật chế độ: Home Assistant Trực Tiếp (Real-time)'
+          : newMode === 'mock'
+          ? 'Đã bật chế độ: Giả Lập Mô Phỏng (Mock Demo)'
+          : 'Đã bật chế độ: Tự Động Kết Nối (Auto Fallback)',
+        t('common.success')
+      );
+      await loadInitial();
+    } catch (err) {
+      toast.error(err.message || 'Lỗi chuyển đổi chế độ', t('common.error'));
+    } finally {
+      setSwitchingMode(false);
     }
   }
 
@@ -74,7 +107,9 @@ export default function HassPerformancePage() {
 
     function connectSSE() {
       try {
-        es = new EventSource('/api/hass/events');
+        const token = localStorage.getItem('hs_token') || '';
+        const sseUrl = token ? `/api/hass/events?token=${encodeURIComponent(token)}` : '/api/hass/events';
+        es = new EventSource(sseUrl);
         eventSourceRef.current = es;
 
         es.onmessage = (event) => {
@@ -341,6 +376,40 @@ export default function HassPerformancePage() {
 
         {/* Action Controls */}
         <div className="flex items-center flex-wrap gap-2.5">
+          {/* Mode Switcher */}
+          <div className="flex items-center gap-1.5 bg-[var(--surface-sunken)] p-1 rounded-[var(--radius-sm)] border border-[var(--border)]">
+            <span className="text-[10.5px] font-mono text-[var(--text-dim)] px-1.5 uppercase font-medium">Chế độ:</span>
+            <div className="sk-seg">
+              <button
+                type="button"
+                onClick={() => handleSwitchMode('auto')}
+                disabled={switchingMode}
+                className={`sk-seg__btn text-xs py-0.5 px-2 font-mono ${hassMode === 'auto' ? 'is-on' : ''}`}
+                title="Tự động: Ưu tiên HA thật, tự động fallback sang Demo khi ngoại tuyến"
+              >
+                🔄 Auto
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSwitchMode('real')}
+                disabled={switchingMode}
+                className={`sk-seg__btn text-xs py-0.5 px-2 font-mono ${hassMode === 'real' ? 'is-on' : ''}`}
+                title="Real-time: Kết nối trực tiếp Home Assistant thật"
+              >
+                ⚡ Real-time
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSwitchMode('mock')}
+                disabled={switchingMode}
+                className={`sk-seg__btn text-xs py-0.5 px-2 font-mono ${hassMode === 'mock' ? 'is-on' : ''}`}
+                title="Mock Demo: Chạy dữ liệu giả lập mô phỏng"
+              >
+                🧪 Mock Demo
+              </button>
+            </div>
+          </div>
+
           <div className="sk-seg">
             <button
               onClick={() => setStreamInterval(1000)}

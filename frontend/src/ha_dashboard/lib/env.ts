@@ -15,10 +15,11 @@ export function getEnvHAConfig(): HAConfig | null {
     return v.toLowerCase() === 'true' || v === '1'
   }
 
-  const explicitMock = toBool(rawMock, false)
+  const localMode = typeof window !== 'undefined' ? localStorage.getItem('hass_mode') : null
+  const isMockMode = localMode === 'mock' || (localMode !== 'real' && (explicitMock || !host || !token))
 
-  // Nếu người dùng bật VITE_HA_USE_MOCK=true -> chạy Demo
-  if (explicitMock || !host || !token) {
+  // Nếu người dùng chọn Mock hoặc chưa cấu hình token -> chạy Demo
+  if (isMockMode) {
     return {
       host: host ?? '',
       token: token ?? '',

@@ -1509,8 +1509,32 @@ curl -u admin:matkhau http://192.168.88.1/rest/ip/hotspot/user
    - Khi WebSocket HA thật không kết nối được sau 3s, giao diện tự động chuyển ngay sang trạng thái Mock/Demo mượt mà, không gây đơ UI.
 
 4. **Kiểm Thử & Build**:
-   - `npm --prefix frontend run build` hoàn thành 100% không lỗi (86 modules transformed, 471ms).
    - Kiểm tra luồng điều hướng thực tế trên Chrome DevTools MCP: Đăng nhập -> `/hass` -> `/hass/smart-home` -> Bấm "← MIKROTIK" -> Về MikroTik Dashboard ngay lập tức.
+
+---
+
+### Phiên 77: Khắc Phục Giám Sát Proxmox Trên Coolify & Bổ Sung Bộ Chuyển Đổi Chế Độ Mock / Real-time Home Assistant
+
+1. **Khắc Phục Giám Sát Proxmox VE**:
+   - **Xác thực biến môi trường trên Coolify**: Đã bổ sung toàn bộ biến môi trường Proxmox (`PROXMOX_HOST`, `PROXMOX_PORT`, `PROXMOX_SCHEME`, `PROXMOX_TOKEN_ID`, `PROXMOX_TOKEN_SECRET`, `PROXMOX_IGNORE_SSL`) và Home Assistant (`HASS_URL`, `HASS_TOKEN`) vào ứng dụng trên Coolify thông qua Coolify API.
+   - **Cơ chế Circuit Breaker & Timeout Proxmox**: Bổ sung `PVE_COOLDOWN_MS = 15000` và giảm timeout trong `backend/proxmox-client.js` xuống 3.5s (`AbortSignal.timeout(3500)`) để chống nghẽn socket khi Proxmox ngoại tuyến.
+   - **Xác thực SSE qua Query Token**: Cập nhật `requireAuth` trong `backend/server.js` để hỗ trợ nhận diện token đăng nhập từ `req.query.token` / `req.query.auth_token` cho các luồng `EventSource('/api/proxmox/events')` và `EventSource('/api/hass/events')`.
+
+2. **Bổ Sung Tùy Chọn Chuyển Đổi Mock / Real-Time Home Assistant**:
+   - **Backend API**:
+     - `GET /api/hass/config`: Trả về chế độ hiện tại (`auto` | `real` | `mock`), trạng thái cấu hình và URL.
+     - `POST /api/hass/mode`: Cho phép thay đổi linh hoạt chế độ kết nối Home Assistant.
+     - `fetchHassData()`: Tuân thủ chế độ được chọn (ép buộc Mock khi chọn Mock; kết nối HA thật khi chọn Real-time; và tự động fallback khi chọn Auto).
+   - **Frontend UI**:
+     - Thêm bộ điều khiển chuyển đổi chế độ (.sk-seg) trực quan trên TopBar trang **Home Assistant OS (`/hass`)** với 3 chế độ: 🔄 **Auto** | ⚡ **Real-time** | 🧪 **Mock Demo**.
+     - Tích hợp lưu trữ lựa chọn vào `localStorage ('hass_mode')` và đồng bộ với Smart Home Dashboard (`ha_dashboard/lib/env.ts`).
+
+3. **Bổ Sung Chế Độ Chuyển Đổi Tương Tự Cho Proxmox VE**:
+   - Thêm `GET /api/proxmox/config` & `POST /api/proxmox/mode`.
+   - Thêm bộ chuyển đổi chế độ trên TopBar trang **Giám sát Proxmox VE (`/proxmox`)** (🔄 **Auto** | ⚡ **Real-time** | 🧪 **Mock Demo**).
+
+4. **Kiểm Thử & Build**:
+   - `npm --prefix frontend run build` 100% thành công (86 modules, 502ms, 0 errors).
 
 ---
 
