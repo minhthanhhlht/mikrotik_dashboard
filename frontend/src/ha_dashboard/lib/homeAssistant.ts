@@ -85,30 +85,33 @@ export class HomeAssistantService {
         )
         // Bật chu kỳ polling cập nhật nhẹ (3 giây/lần)
         this.startHttpPolling()
-        // Cố gắng mở WebSocket nền nếu có thể (nhưng không chặn nếu thất bại)
-        this.connectWebSocket().catch(() => {})
         return
       }
     } catch (apiErr) {
       console.warn('Không thể nạp states qua API Proxy:', apiErr)
     }
 
-    // 2. Thử kết nối trực tiếp WebSocket nếu trên local LAN
-    try {
-      await this.connectWebSocket()
-      await this.fetchStates()
-    } catch (err) {
-      console.warn('Không thể kết nối HA thật qua WebSocket:', err)
-      if (localMode === 'real') {
-        this.states.clear()
-        this.setConnectionState('disconnected')
-        this.noteHandlers.forEach((h) => h('Không thể kết nối tới Home Assistant thật'))
-      } else {
-        // Tự động fallback sang demo nếu là Auto
-        this.states.clear()
-        mockMockStates.forEach((s) => this.states.set(s.entity_id, s))
-        this.setConnectionState('mock')
+    // 2. Thử kết nối trực tiếp WebSocket nếu trên local LAN và không phải HTTPS
+    if (typeof window !== 'undefined' && window.location.protocol !== 'https:') {
+      try {
+        await this.connectWebSocket()
+        await this.fetchStates()
+        return
+      } catch (err) {
+        console.warn('Không thể kết nối HA thật qua WebSocket:', err)
       }
+    }
+
+    // 3. Xử lý khi thất bại
+    if (localMode === 'real') {
+      this.states.clear()
+      this.setConnectionState('disconnected')
+      this.noteHandlers.forEach((h) => h('Không thể kết nối tới Home Assistant thật'))
+    } else {
+      // Tự động fallback sang demo nếu là Auto
+      this.states.clear()
+      mockMockStates.forEach((s) => this.states.set(s.entity_id, s))
+      this.setConnectionState('mock')
     }
   }
 
@@ -156,8 +159,10 @@ export class HomeAssistantService {
               if (!isDone) {
                 isDone = true
                 clearTimeout(timeout)
-                this.noteHandlers.forEach((h) => h(err))
-                this.setConnectionState('disconnected')
+                if (!this.pollTimer) {
+                  this.noteHandlers.forEach((h) => h(err))
+                  this.setConnectionState('disconnected')
+                }
                 reject(new Error(err))
               }
             },
@@ -171,10 +176,12 @@ export class HomeAssistantService {
         if (!isDone) {
           isDone = true
           clearTimeout(timeout)
-          this.noteHandlers.forEach((h) =>
-            h('Không thể kết nối WebSocket tới Home Assistant.'),
-          )
-          this.setConnectionState('disconnected')
+          if (!this.pollTimer) {
+            this.noteHandlers.forEach((h) =>
+              h('Không thể kết nối WebSocket tới Home Assistant.'),
+            )
+            this.setConnectionState('disconnected')
+          }
           reject(new Error('Lỗi WebSocket'))
           ws.close()
         }
@@ -182,7 +189,7 @@ export class HomeAssistantService {
 
       ws.onclose = () => {
         clearTimeout(timeout)
-        if (this.connState === 'connected' || this.connState === 'connecting') {
+        if (!this.pollTimer && (this.connState === 'connected' || this.connState === 'connecting')) {
           this.setConnectionState('disconnected')
           this.scheduleReconnect()
         }

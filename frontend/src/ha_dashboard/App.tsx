@@ -59,13 +59,6 @@ function App() {
     await connectFromEnv()
   }
 
-  // Tự động kết nối tới Home Assistant khi khởi chạy (không cần đăng nhập riêng)
-  useEffect(() => {
-    if (connectionState === 'disconnected') {
-      connectFromEnv()
-    }
-  }, [connectionState, connectFromEnv])
-
   const [view, setView] = useState<string>('overview')
   const [editingCard, setEditingCard] = useState<DashboardCardConfig | null>(null)
   const [defaultCardArea, setDefaultCardArea] = useState<string | undefined>(undefined)
