@@ -2324,7 +2324,7 @@ const DIST = path.resolve(__dirname, '..', 'frontend', 'dist');
 const HAS_BUILD = fs.existsSync(path.join(DIST, 'index.html'));
 if (HAS_BUILD) {
   app.use(express.static(DIST));
-  app.get(/^\/(?!api).*/, (req, res) => {
+  app.get(/^\/(?!api|assets|fonts).*/, (req, res) => {
     res.sendFile(path.join(DIST, 'index.html'));
   });
 }
