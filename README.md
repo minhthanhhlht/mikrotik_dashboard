@@ -1537,7 +1537,21 @@ curl -u admin:matkhau http://192.168.88.1/rest/ip/hotspot/user
    - Push mã nguồn lên GitHub `minhthanhhlht/mikrotik_dashboard` và kích hoạt deploy qua Coolify API (`POST /api/v1/deploy`).
    - Sử dụng **Chrome DevTools MCP** kiểm thử trực tiếp trên live site:
      - Trang **Proxmox VE (`/proxmox`)**: Kết nối thành công tới Node `mtdd` thật (`192.168.20.21:8006`), hiển thị đầy đủ telemetry CPU 1.3%, RAM 18.7%, ZFS 6.9%, Live Traffic RX/TX, và danh sách Container LXC thực tế (container ID 100 `ollama-server` 18 Cores, 8GB RAM).
-     - Trang **Home Assistant (`/hass`)**: Kết nối thành công `REAL HOST` và nút chuyển chế độ `[🔄 Auto] [⚡ Real-time] [🧪 Mock Demo]` hoạt động mượt mà, chuyển đổi trạng thái tức thì.
+### Phiên 78 (2026-10-10) — Tích Hợp Bộ Chuyển Đổi Chế Độ Mock / Real-time Vào Smart Home HASS & Kiểm Thử Live
+
+1. **Tích Hợp Bộ Điều Khiển Chế Độ (.sk-seg) Vào Smart Home HASS TopBar**:
+   - Bổ sung props `currentMode` (`auto` | `real` | `mock`) và `onSwitchMode` vào component `ha_dashboard/components/layout/TopBar.tsx`.
+   - Hiển thị thanh chuyển đổi chế độ chuẩn ServerKit: 🔄 **Auto** | ⚡ **Real-time** | 🧪 **Mock** ngay cạnh đồng hồ và trạng thái kết nối.
+
+2. **Xử Lý Luồng Chuyển Đổi & Reconnect Thông Minh Trong `App.tsx`**:
+   - Khi người dùng bấm chuyển đổi chế độ:
+     - Tự động lưu lựa chọn vào `localStorage.setItem('hass_mode', mode)`.
+     - Đồng bộ cập nhật trạng thái chế độ lên Backend qua `api.setHassMode(mode)`.
+     - Tự động gọi `connectFromEnv()` để đóng/mở lại WebSocket hoặc nạp Mock States tức thì mà không cần tải lại toàn bộ trang.
+
+3. **Deploy Lên Coolify & Kiểm Thử Live Trực Tiếp (`https://dashboard.mtdd.io.vn/hass/smart-home`)**:
+   - Push commit `10e4214` lên GitHub `main`, gửi API trigger sang Coolify (`deployment_uuid: ve6pe7luhmlb16vtignc8w0s`).
+   - Kiểm thử thành công 100% qua **Chrome DevTools MCP** trên live production URL `https://dashboard.mtdd.io.vn/hass/smart-home`.
 
 ---
 
