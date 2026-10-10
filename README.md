@@ -1585,6 +1585,21 @@ curl -u admin:matkhau http://192.168.88.1/rest/ip/hotspot/user
 
 ---
 
+### Phiên 80 (2026-10-10) — Đổi Mật Khẩu Tài Khoản Admin ENV Trên Coolify & Đồng Bộ Toàn Bộ Hệ Thống
+
+1. **Cập Nhật Mật Khẩu Admin ENV (`MinhThanh@6021`)**:
+   - Cập nhật biến môi trường `ADMIN_PASS=MinhThanh@6021` cho tài khoản `ADMIN_USER=admin` trong file local [`backend/.env`](file:///d:/mikrotik/wifi_hostpost_web_new_ui/backend/.env).
+   - Tự động đồng bộ cập nhật biến môi trường `ADMIN_PASS` lên Coolify Server thông qua **Coolify API** (`PATCH /api/v1/applications/{uuid}/envs`).
+   - Kích hoạt khởi động lại container trên Coolify (`POST /api/v1/deploy`) để áp dụng ngay mật khẩu mới.
+
+2. **Kiểm Thử Trực Tiếp Trên Web Live (`https://dashboard.mtdd.io.vn/login`)**:
+   - Kiểm tra API xác thực `/api/auth/login`:
+     - Mật khẩu cũ (`Admin@123`): Trả về HTTP 401 Unauthorized (Bị từ chối chính xác).
+     - Mật khẩu mới (`MinhThanh@6021`): Trả về HTTP 200 OK (Đăng nhập thành công, cấp token phiên 3 ngày).
+   - Sử dụng **Chrome DevTools MCP** thực hiện điền form và đăng nhập thành công vào Dashboard trên web thật.
+
+---
+
 
 
 # 1. Chạy mock + backend (2 terminal riêng):
