@@ -2323,8 +2323,11 @@ app.post('/api/ipam/reset-default', requireAuth, requireRole(['admin', 'operator
 const DIST = path.resolve(__dirname, '..', 'frontend', 'dist');
 const HAS_BUILD = fs.existsSync(path.join(DIST, 'index.html'));
 if (HAS_BUILD) {
-  app.use(express.static(DIST));
+  app.use(express.static(DIST, { maxAge: '1y', immutable: true, index: false }));
   app.get(/^\/(?!api|assets|fonts).*/, (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.sendFile(path.join(DIST, 'index.html'));
   });
 }
