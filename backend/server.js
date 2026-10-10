@@ -2323,8 +2323,22 @@ app.post('/api/ipam/reset-default', requireAuth, requireRole(['admin', 'operator
 const DIST = path.resolve(__dirname, '..', 'frontend', 'dist');
 const HAS_BUILD = fs.existsSync(path.join(DIST, 'index.html'));
 if (HAS_BUILD) {
+  app.use('/assets', express.static(path.join(DIST, 'assets'), { maxAge: '1y', immutable: true }));
   app.use(express.static(DIST, { maxAge: '1y', immutable: true, index: false }));
-  app.get(/^\/(?!api|assets|fonts).*/, (req, res) => {
+  app.get('*', (req, res, next) => {
+    if (
+      req.path.startsWith('/api') ||
+      req.path.startsWith('/assets') ||
+      req.path.startsWith('/fonts') ||
+      req.path.endsWith('.js') ||
+      req.path.endsWith('.css') ||
+      req.path.endsWith('.woff2') ||
+      req.path.endsWith('.png') ||
+      req.path.endsWith('.ico') ||
+      req.path.endsWith('.svg')
+    ) {
+      return next();
+    }
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
