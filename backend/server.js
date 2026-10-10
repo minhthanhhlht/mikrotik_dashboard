@@ -58,6 +58,8 @@ import {
   isHassConfigured,
   getRealHassSummary,
   executeRealHassCoreAction,
+  getRealHassStates,
+  callRealHassService,
 } from './hass-client.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -2119,6 +2121,51 @@ app.post('/api/hass/core/action', async (req, res) => {
     res.status(400).json({ error: err.message });
   }
 });
+
+// Lấy danh sách States thực tế từ Home Assistant (Proxy qua backend Express để tránh CORS/Mixed Content)
+app.get('/api/hass/states', async (req, res) => {
+  try {
+    if (currentHassMode !== 'mock' && isHassConfigured()) {
+      try {
+        const states = await getRealHassStates();
+        return res.json(states);
+      } catch (err) {
+        console.warn('[HassOS] Lỗi lấy danh sách states từ Home Assistant thật:', err.message);
+        if (currentHassMode === 'real') {
+          return res.status(502).json({ error: 'Không thể kết nối Home Assistant thật: ' + err.message });
+        }
+      }
+    }
+    // Chế độ Mock fallback
+    res.json([]);
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi lấy states Home Assistant: ' + err.message });
+  }
+});
+
+// Proxy gọi Service điều khiển thiết bị Home Assistant (turn_on, turn_off, toggle, set_temperature,...)
+app.post('/api/hass/services/:domain/:service', async (req, res) => {
+  const { domain, service } = req.params;
+  const serviceData = req.body || {};
+  try {
+    if (currentHassMode !== 'mock' && isHassConfigured()) {
+      try {
+        const result = await callRealHassService(domain, service, serviceData);
+        return res.json(result);
+      } catch (err) {
+        console.warn(`[HassOS] Lỗi gọi service ${domain}.${service}:`, err.message);
+        if (currentHassMode === 'real') {
+          return res.status(502).json({ error: 'Lỗi điều khiển thiết bị: ' + err.message });
+        }
+      }
+    }
+    // Mock fallback response
+    res.json({ success: true, mode: 'mock', domain, service });
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi thực thi service: ' + err.message });
+  }
+});
+
 
 // ----------------------------------------------------------------------------
 // Sổ quản lý IP (IPAM - IP Address Management) - Lưu JSON tại backend/data/ip-plan.json

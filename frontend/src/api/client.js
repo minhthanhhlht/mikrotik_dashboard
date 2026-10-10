@@ -183,10 +183,16 @@ export const api = {
   proxmoxConfig: () => request('/proxmox/config'),
   setProxmoxMode: (mode) => request('/proxmox/mode', { method: 'POST', body: { mode } }),
 
-  // Home Assistant OS (HassOS) Performance, Add-ons & Core
+  // Home Assistant OS (HassOS) Performance, Add-ons, Entities & Services
   hassSummary: () => request('/hass/summary'),
   hassConfig: () => request('/hass/config'),
   setHassMode: (mode) => request('/hass/mode', { method: 'POST', body: { mode } }),
+  hassStates: () => request('/hass/states'),
+  callHassService: (domain, service, serviceData) =>
+    request(`/hass/services/${encodeURIComponent(domain)}/${encodeURIComponent(service)}`, {
+      method: 'POST',
+      body: serviceData,
+    }),
   hassAddonAction: (slug, action) =>
     request(`/hass/addons/${encodeURIComponent(slug)}/action`, {
       method: 'POST',

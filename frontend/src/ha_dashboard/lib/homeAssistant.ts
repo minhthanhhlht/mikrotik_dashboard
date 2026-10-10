@@ -6,15 +6,13 @@ import type {
   StateChangedEvent,
 } from './types'
 import { mockStates as mockMockStates } from '../data/mockData'
+import { api } from '../../api/client.js'
 
 /**
  * Service kết nối Home Assistant.
- * - WebSocket: đăng ký theo dõi state thay đổi (realtime).
- * - REST API: call service để điều khiển entity.
- *
- * Hoạt động theo 2 chế độ:
- *  - real: kết nối HA thật
- *  - mock: dữ liệu giả lập (không có socket)
+ * - Hỗ trợ kết nối qua Backend REST/Proxy API (bảo mật qua HTTPS, chống chặn Mixed Content)
+ * - WebSocket: đăng ký theo dõi state thay đổi (realtime khi ở local).
+ * - Hoạt động theo 2 chế độ: real (kết nối HA thật) & mock (dữ liệu giả lập mô phỏng).
  */
 export class HomeAssistantService {
   private ws: WebSocket | null = null
@@ -24,6 +22,7 @@ export class HomeAssistantService {
   private eventId = 0
   private connectTimeout = 15000
   private pendingRequests = new Map<number, { resolve: (res: unknown) => void; reject: (err: Error) => void }>()
+  private pollTimer: ReturnType<typeof setInterval> | null = null
 
   // Handlers
   private stateHandlers = new Set<(evt: StateChangedEvent) => void>()
@@ -62,7 +61,9 @@ export class HomeAssistantService {
     this.disconnect()
     this.config = config
 
-    if (config.useMock) {
+    const localMode = typeof window !== 'undefined' ? localStorage.getItem('hass_mode') : 'auto'
+
+    if (config.useMock || localMode === 'mock') {
       // Chế độ demo: nạp mock data
       this.states.clear()
       mockMockStates.forEach((s) => this.states.set(s.entity_id, s))
@@ -71,14 +72,43 @@ export class HomeAssistantService {
     }
 
     this.setConnectionState('connecting')
+
+    // 1. Thử lấy danh sách States qua Backend Proxy API (Đảm bảo an toàn qua HTTPS và hỗ trợ mọi mạng)
+    try {
+      const realStates = await api.hassStates()
+      if (Array.isArray(realStates) && realStates.length > 0) {
+        this.states.clear()
+        realStates.forEach((s: HAState) => this.states.set(s.entity_id, s))
+        this.setConnectionState('connected')
+        this.stateHandlers.forEach((h) =>
+          h({ entity_id: '', new_state: null, old_state: null }),
+        )
+        // Bật chu kỳ polling cập nhật nhẹ (3 giây/lần)
+        this.startHttpPolling()
+        // Cố gắng mở WebSocket nền nếu có thể (nhưng không chặn nếu thất bại)
+        this.connectWebSocket().catch(() => {})
+        return
+      }
+    } catch (apiErr) {
+      console.warn('Không thể nạp states qua API Proxy:', apiErr)
+    }
+
+    // 2. Thử kết nối trực tiếp WebSocket nếu trên local LAN
     try {
       await this.connectWebSocket()
       await this.fetchStates()
     } catch (err) {
-      console.warn('Không thể kết nối HA thật, tự động fallback sang Demo:', err)
-      this.states.clear()
-      mockMockStates.forEach((s) => this.states.set(s.entity_id, s))
-      this.setConnectionState('mock')
+      console.warn('Không thể kết nối HA thật qua WebSocket:', err)
+      if (localMode === 'real') {
+        this.states.clear()
+        this.setConnectionState('disconnected')
+        this.noteHandlers.forEach((h) => h('Không thể kết nối tới Home Assistant thật'))
+      } else {
+        // Tự động fallback sang demo nếu là Auto
+        this.states.clear()
+        mockMockStates.forEach((s) => this.states.set(s.entity_id, s))
+        this.setConnectionState('mock')
+      }
     }
   }
 
@@ -276,26 +306,90 @@ export class HomeAssistantService {
     )
   }
 
+  /* ============ HTTP Polling & Background Sync ============ */
+
+  private startHttpPolling() {
+    this.stopHttpPolling()
+    this.pollTimer = setInterval(() => {
+      if (this.connState === 'connected' && (!this.ws || this.ws.readyState !== WebSocket.OPEN)) {
+        this.fetchStatesViaHttp().catch(() => {})
+      }
+    }, 3000)
+  }
+
+  private stopHttpPolling() {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer)
+      this.pollTimer = null
+    }
+  }
+
+  async fetchStatesViaHttp(): Promise<void> {
+    if (this.connState === 'mock') return
+    try {
+      const realStates = await api.hassStates()
+      if (Array.isArray(realStates) && realStates.length > 0) {
+        let changed = false
+        realStates.forEach((s: HAState) => {
+          const prev = this.states.get(s.entity_id)
+          if (!prev || prev.state !== s.state || prev.last_updated !== s.last_updated) {
+            this.states.set(s.entity_id, s)
+            changed = true
+          }
+        })
+        if (changed) {
+          this.stateHandlers.forEach((h) =>
+            h({ entity_id: '', new_state: null, old_state: null }),
+          )
+        }
+      }
+    } catch {
+      /* ignore background polling errors */
+    }
+  }
+
   /* ============ Actions (call service) ============ */
 
   async callService(domain: string, service: string, data: Record<string, unknown>): Promise<ActionResult> {
-    if (this.config?.useMock || this.connState === 'mock' || !this.config) {
-      this.applyMockAction(domain, service, data)
+    // 1. Áp dụng ngay state thay đổi cục bộ (optimistic UI update) để phản hồi siêu nhạy
+    this.applyMockAction(domain, service, data)
+
+    if (this.config?.useMock || this.connState === 'mock') {
       return { ok: true }
     }
 
-    try {
-      await this.sendCommand({
-        type: 'call_service',
-        domain,
-        service,
-        service_data: data,
-      })
-      return { ok: true }
-    } catch (err) {
-      console.error('Lỗi callService qua WebSocket:', err)
-      return { ok: false, error: (err as Error).message }
+    // 2. Thử gửi qua WebSocket nếu socket đang mở
+    let wsSuccess = false
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      try {
+        await this.sendCommand({
+          type: 'call_service',
+          domain,
+          service,
+          service_data: data,
+        })
+        wsSuccess = true
+      } catch (wsErr) {
+        console.warn('Lỗi gọi service qua WebSocket, fallback sang REST Proxy:', wsErr)
+      }
     }
+
+    // 3. Nếu chưa gửi qua WS thành công, gọi qua Backend Proxy REST API
+    if (!wsSuccess) {
+      try {
+        await api.callHassService(domain, service, data)
+      } catch (err) {
+        console.error('Lỗi callService qua REST Proxy:', err)
+        return { ok: false, error: (err as Error).message }
+      }
+    }
+
+    // 4. Đồng bộ lại state thật sau 300ms
+    setTimeout(() => {
+      this.fetchStatesViaHttp().catch(() => {})
+    }, 300)
+
+    return { ok: true }
   }
 
   /* ============ Helper action theo từng loại ============ */
@@ -442,6 +536,7 @@ export class HomeAssistantService {
   /* ============ Dọn dẹp ============ */
 
   disconnect() {
+    this.stopHttpPolling()
     if (this.ws) {
       this.ws.close()
       this.ws = null

@@ -283,3 +283,65 @@ export async function executeRealHassCoreAction(action) {
     result: data,
   };
 }
+
+/**
+ * Lấy toàn bộ danh sách states thực thể từ Home Assistant thật
+ */
+export async function getRealHassStates() {
+  const cfg = getEnvHassConfig();
+  if (!cfg.url || !cfg.token) {
+    throw new Error('Chưa cấu hình HASS_URL hoặc HASS_TOKEN');
+  }
+
+  const cleanUrl = cfg.url.replace(/\/+$/, '');
+  const res = await fetch(`${cleanUrl}/api/states`, {
+    headers: {
+      Authorization: `Bearer ${cfg.token}`,
+      'Content-Type': 'application/json',
+    },
+    signal: AbortSignal.timeout(5000),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`Home Assistant API lỗi (HTTP ${res.status}): ${errText}`);
+  }
+
+  return await res.json();
+}
+
+/**
+ * Gọi Service điều khiển thiết bị trên Home Assistant thật (turn_on, turn_off, toggle, set_temperature, v.v.)
+ */
+export async function callRealHassService(domain, service, serviceData = {}) {
+  const cfg = getEnvHassConfig();
+  if (!cfg.url || !cfg.token) {
+    throw new Error('Chưa cấu hình HASS_URL hoặc HASS_TOKEN');
+  }
+
+  const cleanUrl = cfg.url.replace(/\/+$/, '');
+  const res = await fetch(`${cleanUrl}/api/services/${encodeURIComponent(domain)}/${encodeURIComponent(service)}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${cfg.token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(serviceData || {}),
+    signal: AbortSignal.timeout(5000),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`Home Assistant Service lỗi (HTTP ${res.status}): ${errText}`);
+  }
+
+  const data = await res.json().catch(() => ({ ok: true }));
+  return {
+    success: true,
+    mode: 'real',
+    domain,
+    service,
+    result: data,
+  };
+}
+
