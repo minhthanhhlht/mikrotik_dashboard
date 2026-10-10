@@ -5,6 +5,15 @@ import tailwindcss from '@tailwindcss/vite';
 // Dev server trỏ /api sang backend proxy (Express) chạy trên cổng 3000
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  build: {
+    rollupOptions: {
+      output: {
+        entryFileNames: `assets/app-[hash].js`,
+        chunkFileNames: `assets/chunk-[hash].js`,
+        assetFileNames: `assets/style-[hash].[ext]`,
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {
