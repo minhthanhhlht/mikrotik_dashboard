@@ -1555,6 +1555,36 @@ curl -u admin:matkhau http://192.168.88.1/rest/ip/hotspot/user
 
 ---
 
+### Phiên 79 (2026-10-10) — Khắc Phục Lỗi Mixed Content & Triển Khai Backend REST / Service Call Proxy Cho Smart Home HASS Live
+
+1. **Khắc Phục Vấn Đề Mixed Content & Mạng Cô Lập Trên HTTPS (`https://dashboard.mtdd.io.vn`)**:
+   - **Hiện tượng**: Trình duyệt truy cập Dashboard qua HTTPS bảo mật (`https://dashboard.mtdd.io.vn/hass/smart-home`). Khi chọn chế độ `⚡ Real-time`, trình duyệt cố gắng mở kết nối WebSocket trực tiếp tới `ws://192.168.20.20:8123/api/websocket` dẫn tới việc bị chặn ngay lập tức bởi chính sách **Mixed Content Security Policy** của trình duyệt (đồng thời IP mạng nội bộ `192.168.20.20` không thể truy cập trực tiếp từ mạng ngoài). Lỗi này kích hoạt catch block và tự động fallback về dữ liệu Demo giả lập.
+   - **Giải pháp**: Xây dựng cơ chế **Backend Proxy** trung gian an toàn. Do backend Express trên Coolify nằm cùng mạng LAN với Home Assistant và có đầy đủ quyền kết nối:
+     - Thêm `getRealHassStates()` và `callRealHassService(domain, service, serviceData)` vào `backend/hass-client.js`.
+     - Thêm 2 endpoints mới vào `backend/server.js`:
+       - `GET /api/hass/states`: Proxy lấy danh sách toàn bộ 152+ thực thể thực tế từ Home Assistant OS (`/api/states`).
+       - `POST /api/hass/services/:domain/:service`: Proxy thực thi lệnh điều khiển thiết bị (`light/turn_on`, `switch/toggle`, `climate/set_temperature`, v.v.).
+
+2. **Nâng Cấp `HomeAssistantService` Phía Frontend (`ha_dashboard/lib/homeAssistant.ts`)**:
+   - Thêm phương thức `fetchStatesViaHttp()` và chu kỳ **HTTP Polling nền (3s/lần)** giúp giao diện tự động đồng bộ trạng thái thực tế mọi thiết bị trên nền HTTPS.
+   - Cập nhật `callService()`: Áp dụng ngay thay đổi cục bộ (Optimistic UI update) để giao diện phản hồi siêu nhạy, đồng thời gửi lệnh điều khiển tới backend proxy `/api/hass/services/:domain/:service`.
+   - Ngăn chặn lỗi WebSocket nền ghi đè trạng thái `connected` thành `disconnected` khi HTTP Proxy đang hoạt động ổn định.
+   - Sửa lỗi biến `explicitMock` chưa khai báo trong `ha_dashboard/lib/env.ts`.
+
+3. **Tối Ưu Phục Vụ Tài Nguyên Tĩnh & Xử Lý Định Tuyến Express 5**:
+   - Cấu hình tường minh phục vụ static assets `/assets` và định tuyến SPA trong `backend/server.js` tương thích hoàn toàn chuẩn Express 5 (`app.use((req, res, next) => ...)`).
+   - Thiết lập header `Cache-Control: no-cache, no-store, must-revalidate` cho `index.html` và sinh tên bundle dạng `assets/app-[hash].js` trong `frontend/vite.config.js` để triệt tiêu tình trạng cache HTML/JS cũ trên Cloudflare Edge.
+
+4. **Deploy Lên Coolify & Kiểm Thử Toàn Diện Trực Tiếp Trên Web Live (`https://dashboard.mtdd.io.vn/`)**:
+   - Push commit lên GitHub `minhthanhhlht/mikrotik_dashboard` (branch `main`), kích hoạt Coolify Deploy API (`POST /api/v1/deploy`).
+   - Sử dụng **Chrome DevTools MCP** kiểm thử trực tiếp trên live site:
+     - **Smart Home HASS (`/hass/smart-home`)**: Chế độ `⚡ Real-time` kết nối thành công 100% (Pill xanh lá `Đã kết nối`), hiển thị 152 thực thể Home Assistant thật (đèn, công tắc, cảm biến nhiệt độ SLZB-06U, thời tiết), chuyển đổi mượt mà giữa `[🔄 Auto]`, `[⚡ Real-time]`, và `[🧪 Mock Demo]`.
+     - **Hạ tầng HassOS (`/hass`)**: Hiển thị đầy đủ telemetry thực tế (CPU 2%, Nhiệt độ 45°C, RAM 2.4GB/8GB, Flash 43.9GB/128GB).
+     - **Proxmox Hypervisor (`/proxmox`)**: Kết nối Node `mtdd` thật (CPU 0.4%, RAM 18.9%, ZFS 6.9%, Container LXC ID 100).
+     - **MikroTik Hotspot (`/`)**: Quản trị router, phiên hoạt động, voucher và IP tĩnh ổn định.
+
+---
+
 
 
 # 1. Chạy mock + backend (2 terminal riêng):
