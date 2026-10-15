@@ -1600,6 +1600,29 @@ curl -u admin:matkhau http://192.168.88.1/rest/ip/hotspot/user
 
 ---
 
+### Phiên 81 (2026-10-16) — Tối Ưu Bảng IP Tĩnh Thiết Bị: Bổ Sung Cuộn & Thanh Điều Khiển Phân Trang (Pagination)
+
+1. **Vấn đề & Yêu cầu**:
+   - Danh sách IP tĩnh (`/static-ip`) khi có nhiều thiết bị (50-100+ thiết bị) hiển thị quá dài trên một trang, làm tràn layout và khó theo dõi thao tác.
+   - Yêu cầu: Bổ sung thanh cuộn gọn gàng kèm hệ thống phân trang (pagination), tùy chọn số lượng thiết bị trên mỗi trang, và giữ cố định thanh tiêu đề (sticky header) khi cuộn.
+
+2. **Các cải tiến kỹ thuật đã thực hiện**:
+   - **Thanh cuộn bảng & Sticky Header**:
+     - Bọc bảng trong container cuộn `overflow-x-auto overflow-y-auto max-h-[620px]` với `tableContainerRef`.
+     - Ghim cố định tiêu đề cột `<thead className="sticky top-0 z-10 bg-[var(--surface-2)] shadow-sm">` cùng nền solid trên từng thẻ `th` giúp tiêu đề không bị đè hay trong suốt khi cuộn qua danh sách.
+   - **Hệ thống phân trang thông minh (Smart Pagination)**:
+     - Tùy chọn số lượng bản ghi hiển thị trên mỗi trang: `10`, `15` (mặc định), `25`, `50`, `100`, hoặc `Tất cả (All)`.
+     - Phân trang dạng nút bấm với thuật toán dấu chấm lửng thông minh `getPageNumbers` (hỗ trợ nhảy trang mượt mà không làm vỡ giao diện).
+     - Nút điều hướng nhanh `◀ Trước` và `Sau ▶`, tự động vô hiệu hóa (disabled) ở trang đầu/cuối.
+     - Tự động cuộn mượt (smooth scroll) về đầu bảng khi chuyển trang hoặc đổi số lượng hiển thị.
+     - Tự động reset về trang 1 khi người dùng thay đổi bộ lọc tìm kiếm (Search), phân loại (Type), trạng thái (Status), DHCP Server hoặc Thẻ (Tag).
+     - Giữ nguyên cơ chế xuất dữ liệu Excel/CSV cho toàn bộ danh sách đã lọc (filtered leases) mà không bị giới hạn bởi trang hiện tại.
+   - **Thanh điều khiển chuẩn ServerKit Design System**:
+     - Hiển thị dải thiết bị: `Hiển thị: X – Y / Z thiết bị`.
+     - Tích hợp 2 badge thống kê nhanh: `Tĩnh (Static)` và `Động (Dynamic)`.
+
+---
+
 
 
 # 1. Chạy mock + backend (2 terminal riêng):

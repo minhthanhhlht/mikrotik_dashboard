@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { useToast } from '../hooks/useToast.jsx';
@@ -169,9 +169,24 @@ function FormField({ label, hint, error, required, children }) {
   );
 }
 
+// Helper: Tạo danh sách các số trang kèm dấu chấm lửng thông minh cho pagination
+function getPageNumbers(currentPage, totalPages) {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, i) => i + 1);
+  }
+  if (currentPage <= 4) {
+    return [1, 2, 3, 4, 5, '...', totalPages];
+  }
+  if (currentPage >= totalPages - 3) {
+    return [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+  }
+  return [1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages];
+}
+
 export default function StaticIpPage() {
   const { isViewer } = useAuth();
   const { language, t } = useLanguage();
+  const isVi = language === 'vi';
   const toast = useToast();
 
   const [leases, setLeases] = useState([]);
@@ -188,6 +203,16 @@ export default function StaticIpPage() {
   const [filterStatus, setFilterStatus] = useState('all'); // 'all' | 'bound' | 'waiting' | 'disabled'
   const [filterServer, setFilterServer] = useState('all');
   const [filterTag, setFilterTag] = useState('all');
+
+  // Pagination & Scrollable container states
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15); // 10, 15, 25, 50, 100, 'all'
+  const tableContainerRef = useRef(null);
+
+  // Reset trang về 1 khi người dùng đổi bộ lọc tìm kiếm hoặc kích thước trang
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, filterType, filterStatus, filterServer, filterTag, pageSize]);
 
   // Modals state
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -323,6 +348,32 @@ export default function StaticIpPage() {
       return true;
     });
   }, [leases, searchTerm, filterType, filterStatus, filterServer, filterTag]);
+
+  // Tính toán số trang và phân trang
+  const totalPages = pageSize === 'all'
+    ? 1
+    : Math.max(1, Math.ceil(filteredLeases.length / Number(pageSize)));
+
+  useEffect(() => {
+    if (page > totalPages && totalPages > 0) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  const paginatedLeases = useMemo(() => {
+    if (pageSize === 'all') return filteredLeases;
+    const size = Number(pageSize);
+    const start = (page - 1) * size;
+    return filteredLeases.slice(start, start + size);
+  }, [filteredLeases, page, pageSize]);
+
+  const handlePageChange = (newPage) => {
+    const target = Math.max(1, Math.min(totalPages, newPage));
+    setPage(target);
+    if (tableContainerRef.current) {
+      tableContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   // Copy nhanh
   function handleCopy(text, key) {
@@ -881,22 +932,22 @@ export default function StaticIpPage() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div ref={tableContainerRef} className="overflow-x-auto overflow-y-auto max-h-[620px] transition-all">
             <table className="w-full text-left border-collapse">
-              <thead>
+              <thead className="sticky top-0 z-10 bg-[var(--surface-2)] shadow-sm">
                 <tr className="border-b border-[var(--border)] bg-[var(--surface-2)] text-[11px] font-bold uppercase tracking-wider text-[var(--text-dim)] font-mono">
-                  <th className="py-3.5 pl-4 pr-3">{t('staticIp.colDevice')}</th>
-                  <th className="py-3.5 px-3">{t('staticIp.colIp')}</th>
-                  <th className="py-3.5 px-3">{t('staticIp.colMac')}</th>
-                  <th className="py-3.5 px-3">{t('staticIp.colType')}</th>
-                  <th className="py-3.5 px-3">{t('staticIp.colServer')}</th>
-                  <th className="py-3.5 px-3">{t('staticIp.colStatus')}</th>
-                  <th className="py-3.5 px-3">{t('staticIp.colExpires')}</th>
-                  <th className="py-3.5 pl-3 pr-4 text-right">{t('staticIp.colActions')}</th>
+                  <th className="py-3.5 pl-4 pr-3 bg-[var(--surface-2)]">{t('staticIp.colDevice')}</th>
+                  <th className="py-3.5 px-3 bg-[var(--surface-2)]">{t('staticIp.colIp')}</th>
+                  <th className="py-3.5 px-3 bg-[var(--surface-2)]">{t('staticIp.colMac')}</th>
+                  <th className="py-3.5 px-3 bg-[var(--surface-2)]">{t('staticIp.colType')}</th>
+                  <th className="py-3.5 px-3 bg-[var(--surface-2)]">{t('staticIp.colServer')}</th>
+                  <th className="py-3.5 px-3 bg-[var(--surface-2)]">{t('staticIp.colStatus')}</th>
+                  <th className="py-3.5 px-3 bg-[var(--surface-2)]">{t('staticIp.colExpires')}</th>
+                  <th className="py-3.5 pl-3 pr-4 text-right bg-[var(--surface-2)]">{t('staticIp.colActions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border-soft)] text-xs text-[var(--text)]">
-                {filteredLeases.map((lease) => {
+                {paginatedLeases.map((lease) => {
                   const isStatic = lease.dynamic === false || lease.dynamic === 'false';
                   const isBound = lease.status === 'bound';
                   const isDisabled = Boolean(lease.disabled);
@@ -1128,6 +1179,106 @@ export default function StaticIpPage() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Thanh điều khiển phân trang & thông tin số lượng */}
+        {!initialLoading && filteredLeases.length > 0 && (
+          <div className="border-t border-[var(--border)] bg-[var(--surface-2)]/60 px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-xs">
+            {/* Left: Device count range & per-page selection */}
+            <div className="flex flex-wrap items-center gap-3 text-[var(--text-dim)]">
+              <div>
+                {isVi ? 'Hiển thị: ' : 'Showing: '}
+                <strong className="text-[var(--text)] font-semibold font-mono">
+                  {pageSize === 'all'
+                    ? `1 – ${filteredLeases.length}`
+                    : `${(page - 1) * Number(pageSize) + 1} – ${Math.min(page * Number(pageSize), filteredLeases.length)}`}
+                </strong>
+                {' / '}
+                <strong className="text-[var(--text)] font-semibold font-mono">{filteredLeases.length}</strong>
+                {isVi ? ' thiết bị' : ' devices'}
+              </div>
+
+              <div className="flex items-center gap-1.5 pl-2 border-l border-[var(--border)]">
+                <span className="text-[var(--text-faint)]">{isVi ? 'Mỗi trang:' : 'Per page:'}</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    const val = e.target.value === 'all' ? 'all' : Number(e.target.value);
+                    setPageSize(val);
+                  }}
+                  className="form-input text-xs !h-7 !py-0 !pl-2 !pr-6 bg-[var(--surface)] border-[var(--border)] font-medium font-mono"
+                >
+                  <option value={10}>10</option>
+                  <option value={15}>15</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value="all">{isVi ? 'Tất cả' : 'All'}</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Middle: Pagination Navigation */}
+            {pageSize !== 'all' && totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(page - 1)}
+                  disabled={page === 1}
+                  className="btn btn-secondary btn-sm !h-7 !px-2.5 text-xs disabled:opacity-40"
+                  title={isVi ? 'Trang trước' : 'Previous page'}
+                >
+                  ◀ {isVi ? 'Trước' : 'Prev'}
+                </button>
+
+                {getPageNumbers(page, totalPages).map((p, idx) => {
+                  if (p === '...') {
+                    return (
+                      <span key={`ellipsis-${idx}`} className="px-1 text-[var(--text-faint)] font-mono select-none">
+                        …
+                      </span>
+                    );
+                  }
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => handlePageChange(p)}
+                      className={`btn btn-sm !h-7 !min-w-[28px] !px-1.5 text-xs font-mono ${
+                        page === p
+                          ? 'btn-primary font-bold shadow-sm'
+                          : 'btn-secondary hover:bg-[var(--surface-hover)]'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(page + 1)}
+                  disabled={page === totalPages}
+                  className="btn btn-secondary btn-sm !h-7 !px-2.5 text-xs disabled:opacity-40"
+                  title={isVi ? 'Trang sau' : 'Next page'}
+                >
+                  {isVi ? 'Sau' : 'Next'} ▶
+                </button>
+              </div>
+            )}
+
+            {/* Right: Quick filter stats pills */}
+            <div className="hidden md:flex items-center gap-2">
+              <span className="sk-pill sk-pill--green !py-0.5 !px-2 text-[11px]">
+                <span className="sk-pill__dot" />
+                {filteredLeases.filter((l) => l.dynamic === false || l.dynamic === 'false').length} Tĩnh (Static)
+              </span>
+              <span className="sk-pill !py-0.5 !px-2 text-[11px]">
+                <span className="sk-pill__dot" />
+                {filteredLeases.filter((l) => l.dynamic !== false && l.dynamic !== 'false').length} Động (Dynamic)
+              </span>
+            </div>
           </div>
         )}
       </div>
